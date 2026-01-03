@@ -15,8 +15,11 @@ import importlib.util
 class StabilizerGUI:
     def __init__(self, root):
         self.root = root
-        self.root.title("Paste Extrusion Stabilizer - GUI")
-        self.root.geometry("900x700")
+        self.root.title("Paste Extrusion Stabilizer - Enhanced GUI")
+        self.root.geometry("1100x800")
+        
+        # Configure style
+        self.setup_style()
         
         # Variables
         self.input_file = tk.StringVar()
@@ -45,6 +48,18 @@ class StabilizerGUI:
         
         # Tab 6: Help
         self.create_help_tab()
+    
+    def setup_style(self):
+        """Configure modern ttk style."""
+        style = ttk.Style()
+        style.theme_use('clam')
+        
+        # Configure colors
+        style.configure('Title.TLabel', font=('Arial', 14, 'bold'))
+        style.configure('Subtitle.TLabel', font=('Arial', 10))
+        style.configure('Success.TLabel', foreground='#2ca02c', font=('Arial', 10, 'bold'))
+        style.configure('Warning.TLabel', foreground='#ff7f0e', font=('Arial', 10))
+        style.configure('Accent.TButton', font=('Arial', 11, 'bold'))
     
     def create_stabilization_tab(self):
         """Tab 1: Run Stabilizer"""
@@ -301,10 +316,13 @@ class StabilizerGUI:
             '7': 'Fig. 7 — Extrusion continuity survival curve',
             '8': 'Fig. 8 — First-layer operating envelope heatmap',
             '9': 'Fig. 9 — Electrical yield (open-circuit rate)',
-            '10': 'Fig. 10 — Resistance stability (boxplot)'
+            '10': 'Fig. 10 — Resistance stability (boxplot)',
+            '11': 'Fig. 11 — 3D Toolpath Comparison (Before/After)',
+            '12': 'Fig. 12 — 3D Extrusion Rate Map',
+            '13': 'Fig. 13 — Effectiveness Dashboard'
         }
         
-        # Two columns of checkboxes
+        # Three columns of checkboxes
         checkbox_frame = ttk.Frame(selection_frame)
         checkbox_frame.pack(fill=tk.X)
         
@@ -312,11 +330,19 @@ class StabilizerGUI:
         col1_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=5)
         col2_frame = ttk.Frame(checkbox_frame)
         col2_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=5)
+        col3_frame = ttk.Frame(checkbox_frame)
+        col3_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=5)
         
         for i, (fig_num, desc) in enumerate(fig_descriptions.items()):
             var = tk.BooleanVar(value=True)
             self.fig_vars[fig_num] = var
-            parent = col1_frame if int(fig_num) <= 5 else col2_frame
+            # Split into 3 columns: 1-4, 5-8, 9-12
+            if int(fig_num) <= 4:
+                parent = col1_frame
+            elif int(fig_num) <= 8:
+                parent = col2_frame
+            else:
+                parent = col3_frame
             ttk.Checkbutton(parent, text=f"{desc}", variable=var).pack(anchor=tk.W, pady=2)
         
         # Select all / Deselect all buttons
@@ -473,38 +499,92 @@ For more information, see readme.md
         self.root.update()
         
         try:
-            results = []
+            # Get file paths and resolve them
+            code_dir = Path(__file__).parent
+            original_gcode = self.viz_original.get() or "test.gcode"
+            stabilized_gcode = self.viz_stabilized.get() or "results/stabilized.gcode"
+            
+            original_path = code_dir / original_gcode
+            if not original_path.exists() and original_gcode == "test.gcode":
+                original_path = code_dir / "test_gcode" / "test.gcode"
+            stabilized_path = code_dir / stabilized_gcode
+            
+            if not original_path.exists():
+                self.visualization_log.insert(tk.END, f"ERROR: Original G-code not found: {original_gcode}\n")
+                messagebox.showerror("Error", f"Original G-code not found: {original_gcode}")
+                return
+            
+            if not stabilized_path.exists():
+                self.visualization_log.insert(tk.END, f"ERROR: Stabilized G-code not found: {stabilized_gcode}\n")
+                messagebox.showerror("Error", f"Stabilized G-code not found: {stabilized_gcode}")
+                return
+            
+            figures_to_generate = []
             
             # 3D comparison
             if self.viz_3d.get():
                 self.visualization_log.insert(tk.END, "Creating 3D comparison...\n")
-                cmd = [
-                    sys.executable, "verify_stabilizer.py",  # Plotting removed - use verification instead
-                    "--original", self.viz_original.get(),
-                    "--stabilized", self.viz_stabilized.get(),
-                    "--output", self.viz_output.get()
-                ]
-                result = subprocess.run(cmd, capture_output=True, text=True, cwd=Path(__file__).parent)
-                results.append(("3D Comparison", result))
+                figures_to_generate.append("11")
             
-            # Detailed comparison
+            # Detailed comparison (use 3D extrusion rate map)
             if self.viz_comparison.get():
                 self.visualization_log.insert(tk.END, "Creating detailed comparison...\n")
-                cmd = [
-                    sys.executable, "verify_stabilizer.py",  # Plotting removed - use verification instead
-                    self.viz_original.get(), self.viz_stabilized.get()
-                ]
-                result = subprocess.run(cmd, capture_output=True, text=True, cwd=Path(__file__).parent)
-                results.append(("Detailed Comparison", result))
+                figures_to_generate.append("12")
             
-            # Output results
-            for name, result in results:
-                self.visualization_log.insert(tk.END, f"\n{name}:\n")
-                self.visualization_log.insert(tk.END, result.stdout)
-                if result.stderr:
-                    self.visualization_log.insert(tk.END, "\nSTDERR:\n" + result.stderr)
+            if not figures_to_generate:
+                messagebox.showwarning("No Selection", "Please select at least one visualization option.")
+                return
             
-            messagebox.showinfo("Success", "Visualizations generated successfully!")
+            # Use generate_10_figures.py for 3D visualizations
+            cmd = [
+                sys.executable, "generate_10_figures.py",
+                "--baseline-gcode", str(original_path),
+                "--stabilized-gcode", str(stabilized_path),
+                "--data-dir", str(code_dir / "data"),
+                "--figures"
+            ] + figures_to_generate
+            
+            self.visualization_log.insert(tk.END, f"Running: {' '.join(cmd)}\n\n")
+            self.visualization_log.insert(tk.END, "NOTE: Figures will open in separate windows.\n")
+            self.visualization_log.insert(tk.END, "Close the figure windows to continue.\n\n")
+            self.root.update()
+            
+            # CRITICAL: Don't capture stdout/stderr - matplotlib needs direct access to display
+            # Run the process without capturing output so figure windows can appear
+            self.visualization_log.insert(tk.END, "Starting figure generation...\n")
+            self.visualization_log.insert(tk.END, "Figure windows will appear on your screen.\n")
+            self.visualization_log.insert(tk.END, "Close each window to proceed to the next figure.\n\n")
+            self.root.update()
+            
+            # Run without capturing output - this is essential for matplotlib to display windows
+            import os
+            env = os.environ.copy()
+            
+            # Run the process - matplotlib will display windows directly
+            process = subprocess.Popen(cmd, cwd=code_dir, env=env)
+            
+            # Wait for completion
+            returncode = process.wait()
+            
+            if returncode == 0:
+                self.visualization_log.insert(tk.END, "\n✓ Figure generation completed!\n")
+                messagebox.showinfo("Success", 
+                                  f"Visualizations generated!\n\n"
+                                  "Figures should have been displayed in separate windows.\n"
+                                  "If figures didn't appear, try running from terminal:\n"
+                                  f"{' '.join(cmd)}\n\n"
+                                  "Use the figure window controls to save them manually.")
+            else:
+                self.visualization_log.insert(tk.END, f"\n⚠ Process exited with code {returncode}\n")
+                messagebox.showwarning("Warning", 
+                                     f"Process exited with code {returncode}.\n"
+                                     "Figures may still have been displayed.\n"
+                                     "Check terminal output for details.")
+            
+            # Statistics summary
+            if self.viz_stats.get():
+                self.visualization_log.insert(tk.END, "\nGenerating statistics summary...\n")
+                self.visualization_log.insert(tk.END, "Statistics available in verification tab.\n")
         
         except Exception as e:
             self.visualization_log.insert(tk.END, f"\n\nERROR: {str(e)}")
@@ -665,17 +745,12 @@ For more information, see readme.md
                 else:
                     # Build command - only include CSV if file exists
                     cmd = [
-                        sys.executable, "generate_paper_figures.py",
+                        sys.executable, "generate_10_figures.py",
                         "--baseline-gcode", str(baseline_path),
                         "--stabilized-gcode", str(stabilized_path),
+                        "--data-dir", str(code_dir / "data"),
+                        "--figures", "1", "2", "3"
                     ]
-                    
-                    # Add CSV argument only if file exists
-                    stabilized_csv_path = code_dir / stabilized_csv
-                    if stabilized_csv_path.exists():
-                        cmd.extend(["--stabilized-csv", str(stabilized_csv_path)])
-                    
-                    cmd.extend(["--figures", "1", "2", "3"])
                     
                     result = subprocess.run(cmd, capture_output=True, text=True, 
                                           cwd=Path(__file__).parent)
@@ -701,10 +776,10 @@ For more information, see readme.md
                     errors.append("Advanced plots")
                 else:
                     cmd = [
-                        sys.executable, "generate_paper_figures.py",
+                        sys.executable, "generate_10_figures.py",
                         "--baseline-gcode", str(baseline_path),
                         "--stabilized-gcode", str(stabilized_path),
-                        "--print-trials", str(print_trials),
+                        "--data-dir", str(code_dir / "data"),
                         "--figures", "4", "5", "6", "7"
                     ]
                     
@@ -785,22 +860,31 @@ For more information, see readme.md
             ] + selected_figures
             
             self.figures_10_log.insert(tk.END, f"Running: {' '.join(cmd)}\n\n")
+            self.figures_10_log.insert(tk.END, "IMPORTANT: Figures will open in separate windows.\n")
+            self.figures_10_log.insert(tk.END, "Close each figure window to proceed to the next one.\n\n")
             self.root.update()
             
-            result = subprocess.run(cmd, capture_output=True, text=True, 
-                                  cwd=code_dir)
+            # Run without capturing output so matplotlib can display windows
+            import os
+            env = os.environ.copy()
             
-            self.figures_10_log.insert(tk.END, result.stdout)
-            if result.stderr:
-                self.figures_10_log.insert(tk.END, "\n\nSTDERR:\n" + result.stderr)
+            process = subprocess.Popen(cmd, cwd=code_dir, env=env)
+            returncode = process.wait()
             
-            if result.returncode == 0:
+            if returncode == 0:
+                self.figures_10_log.insert(tk.END, "\n✓ Figure generation completed!\n")
                 messagebox.showinfo("Success", 
                                   f"Generated {len(selected_figures)} figure(s)!\n\n"
-                                  "Figures are displayed on screen.\n"
+                                  "Figures should have been displayed in separate windows.\n"
+                                  "If figures didn't appear, try running from terminal:\n"
+                                  f"{' '.join(cmd)}\n\n"
                                   "Use the figure window controls to save them manually.")
             else:
-                messagebox.showwarning("Warning", "Some figures may have failed. Check the log.")
+                self.figures_10_log.insert(tk.END, f"\n⚠ Process exited with code {returncode}\n")
+                messagebox.showwarning("Warning", 
+                                     f"Process exited with code {returncode}.\n"
+                                     "Figures may still have been displayed.\n"
+                                     "Check terminal output for details.")
         
         except Exception as e:
             self.figures_10_log.insert(tk.END, f"\n\nERROR: {str(e)}")
