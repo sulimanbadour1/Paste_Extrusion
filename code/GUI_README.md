@@ -7,7 +7,7 @@ The GUI application provides an intuitive interface to guide you through the com
 ## Launching the GUI
 
 ```bash
-cd /Users/mpmp/Desktop/paste_paper/paste_paper_package/data/code
+cd data/code
 python3 stabilizer_gui.py
 ```
 

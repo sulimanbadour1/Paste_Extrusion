@@ -568,7 +568,7 @@ def main():
     stab = PasteStabilizerV2(cfg)
 
     try:
-    in_lines = in_path.read_text(encoding="utf-8", errors="replace").splitlines()
+        in_lines = in_path.read_text(encoding="utf-8", errors="replace").splitlines()
     except Exception as e:
         print(f"ERROR: Failed to read input file: {e}", file=sys.stderr)
         sys.exit(1)
@@ -577,7 +577,7 @@ def main():
         print("WARNING: Input file is empty", file=sys.stderr)
     
     try:
-    out_lines = stab.transform(in_lines)
+        out_lines = stab.transform(in_lines)
     except Exception as e:
         print(f"ERROR: Failed to transform G-code: {e}", file=sys.stderr)
         import traceback
@@ -585,7 +585,7 @@ def main():
         sys.exit(1)
 
     try:
-    out_path.write_text("\n".join(out_lines) + "\n", encoding="utf-8")
+        out_path.write_text("\n".join(out_lines) + "\n", encoding="utf-8")
         log_path.write_text("\n".join(stab.changes) + "\n", encoding="utf-8")
     except Exception as e:
         print(f"ERROR: Failed to write output files: {e}", file=sys.stderr)

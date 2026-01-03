@@ -421,7 +421,7 @@ For more information, see readme.md
         try:
             cmd = [sys.executable, "generate_research_plots.py"]
             result = subprocess.run(cmd, capture_output=True, text=True, 
-                                  cwd=Path(__file__).parent.parent)
+                                  cwd=Path(__file__).parent)
             
             self.research_log.insert(tk.END, result.stdout)
             if result.stderr:
