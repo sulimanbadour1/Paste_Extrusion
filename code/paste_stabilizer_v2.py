@@ -568,7 +568,7 @@ def main():
     stab = PasteStabilizerV2(cfg)
 
     try:
-        in_lines = in_path.read_text(encoding="utf-8", errors="replace").splitlines()
+     in_lines = in_path.read_text(encoding="utf-8", errors="replace").splitlines()
     except Exception as e:
         print(f"ERROR: Failed to read input file: {e}", file=sys.stderr)
         sys.exit(1)
@@ -577,7 +577,7 @@ def main():
         print("WARNING: Input file is empty", file=sys.stderr)
     
     try:
-        out_lines = stab.transform(in_lines)
+     out_lines = stab.transform(in_lines)
     except Exception as e:
         print(f"ERROR: Failed to transform G-code: {e}", file=sys.stderr)
         import traceback
@@ -590,12 +590,12 @@ def main():
     except Exception as e:
         print(f"ERROR: Failed to write output files: {e}", file=sys.stderr)
         sys.exit(1)
-
-    if not args.no_csv:
-        try:
+    try:
+        if not args.no_csv:
             write_csv(csv_path, stab.log_rows)
-        except Exception as e:
-            print(f"WARNING: Failed to write CSV log: {e}", file=sys.stderr)
+    except Exception as e:
+        print(f"WARNING: Failed to write CSV log: {e}", file=sys.stderr)
+        sys.exit(1)
 
     print(f"✓ Saved stabilized G-code: {out_path} ({len(out_lines)} lines)")
     print(f"✓ Saved change log: {log_path} ({len(stab.changes)} changes)")

@@ -10,6 +10,7 @@ from pathlib import Path
 import subprocess
 import sys
 import os
+import importlib.util
 
 class StabilizerGUI:
     def __init__(self, root):
@@ -210,29 +211,58 @@ class StabilizerGUI:
         
         desc = ttk.Label(frame, 
                         text="Generate all figures for your research paper:\n"
-                             "• Print trials analysis\n• Electrical trace results\n• Pressure simulations\n• Stabilization analysis",
+                             "• Print trials analysis\n• Electrical trace results\n• Pressure simulations\n• Statistical analysis",
                         justify=tk.CENTER)
         desc.pack(pady=5)
+        
+        # Plot options
+        options_frame = ttk.LabelFrame(frame, text="Plot Options", padding=10)
+        options_frame.pack(fill=tk.X, padx=20, pady=10)
+        
+        self.plot_basic = tk.BooleanVar(value=True)
+        self.plot_advanced = tk.BooleanVar(value=True)
+        
+        ttk.Checkbutton(options_frame, text="Basic Research Plots (extrusion metrics, success rates, clogs, pressure simulations, electrical results)", 
+                       variable=self.plot_basic).pack(anchor=tk.W, pady=2)
+        ttk.Checkbutton(options_frame, text="Advanced Statistical Analysis (significance tests, effect sizes, correlations, pressure actions)", 
+                       variable=self.plot_advanced).pack(anchor=tk.W, pady=2)
         
         # Info
         info_frame = ttk.LabelFrame(frame, text="Information", padding=10)
         info_frame.pack(fill=tk.X, padx=20, pady=10)
         
-        info_text = ("This will generate all publication-ready figures:\n\n"
+        info_text = ("Basic Plots:\n"
                     "• Extrusion onset and flow duration boxplots\n"
                     "• Success rates (first-layer, completion)\n"
                     "• Clog frequency analysis\n"
                     "• Pressure simulation comparisons\n"
                     "• Electrical trace results\n"
-                    "• Comprehensive summary figure\n\n"
+                    "• Pressure trace from run_log.csv\n\n"
+                    "Advanced Plots:\n"
+                    "• Statistical significance tests (t-tests)\n"
+                    "• Effect sizes (Cohen's d)\n"
+                    "• Metric correlations\n"
+                    "• Pressure actions over time\n"
+                    "• Comprehensive multi-panel summary\n\n"
                     "All figures are saved to the 'figures/' directory.")
         
-        ttk.Label(info_frame, text=info_text, justify=tk.LEFT).pack(anchor=tk.W)
+        ttk.Label(info_frame, text=info_text, justify=tk.LEFT, font=("Courier", 9)).pack(anchor=tk.W)
         
-        # Run research plots
-        plots_btn = ttk.Button(frame, text="Generate Research Plots", 
+        # Buttons
+        buttons_frame = ttk.Frame(frame)
+        buttons_frame.pack(pady=10)
+        
+        plots_btn = ttk.Button(buttons_frame, text="Generate All Selected Plots", 
+                              command=self.run_all_research_plots, style="Accent.TButton")
+        plots_btn.pack(side=tk.LEFT, padx=5)
+        
+        basic_btn = ttk.Button(buttons_frame, text="Basic Only", 
                               command=self.run_research_plots)
-        plots_btn.pack(pady=20)
+        basic_btn.pack(side=tk.LEFT, padx=5)
+        
+        advanced_btn = ttk.Button(buttons_frame, text="Advanced Only", 
+                                 command=self.run_advanced_plots)
+        advanced_btn.pack(side=tk.LEFT, padx=5)
         
         # Research plots log
         plots_log_frame = ttk.LabelFrame(frame, text="Output", padding=10)
@@ -413,9 +443,9 @@ For more information, see readme.md
             messagebox.showerror("Error", f"Failed to generate visualizations: {str(e)}")
     
     def run_research_plots(self):
-        """Run research plots script."""
+        """Run basic research plots script."""
         self.research_log.delete(1.0, tk.END)
-        self.research_log.insert(tk.END, "Generating research plots...\n\n")
+        self.research_log.insert(tk.END, "Generating basic research plots...\n\n")
         self.root.update()
         
         try:
@@ -428,13 +458,111 @@ For more information, see readme.md
                 self.research_log.insert(tk.END, "\n\nSTDERR:\n" + result.stderr)
             
             if result.returncode == 0:
-                messagebox.showinfo("Success", "Research plots generated successfully!")
+                messagebox.showinfo("Success", "Basic research plots generated successfully!")
             else:
                 messagebox.showwarning("Warning", "Some plots may have failed. Check the log.")
         
         except Exception as e:
             self.research_log.insert(tk.END, f"\n\nERROR: {str(e)}")
             messagebox.showerror("Error", f"Failed to generate research plots: {str(e)}")
+    
+    def run_advanced_plots(self):
+        """Run advanced research plots script."""
+        self.research_log.delete(1.0, tk.END)
+        self.research_log.insert(tk.END, "Generating advanced research plots...\n\n")
+        self.root.update()
+        
+        try:
+            # Check if scipy is available
+            import importlib
+            scipy_available = importlib.util.find_spec("scipy") is not None
+            if not scipy_available:
+                self.research_log.insert(tk.END, "⚠ Note: scipy not installed. Using simplified statistical tests.\n")
+                self.research_log.insert(tk.END, "   Install with: pip install scipy (for more accurate tests)\n\n")
+                self.root.update()
+            
+            cmd = [sys.executable, "generate_advanced_plots.py"]
+            result = subprocess.run(cmd, capture_output=True, text=True, 
+                                  cwd=Path(__file__).parent)
+            
+            self.research_log.insert(tk.END, result.stdout)
+            if result.stderr:
+                self.research_log.insert(tk.END, "\n\nSTDERR:\n" + result.stderr)
+            
+            if result.returncode == 0:
+                messagebox.showinfo("Success", "Advanced research plots generated successfully!")
+            else:
+                messagebox.showwarning("Warning", "Some plots may have failed. Check the log.")
+        
+        except Exception as e:
+            self.research_log.insert(tk.END, f"\n\nERROR: {str(e)}")
+            messagebox.showerror("Error", f"Failed to generate advanced plots: {str(e)}")
+    
+    def run_all_research_plots(self):
+        """Run all selected research plots."""
+        self.research_log.delete(1.0, tk.END)
+        self.research_log.insert(tk.END, "Generating all selected research plots...\n\n")
+        self.root.update()
+        
+        results = []
+        errors = []
+        
+        if self.plot_basic.get():
+            self.research_log.insert(tk.END, "=== Generating Basic Research Plots ===\n")
+            self.root.update()
+            try:
+                cmd = [sys.executable, "generate_research_plots.py"]
+                result = subprocess.run(cmd, capture_output=True, text=True, 
+                                      cwd=Path(__file__).parent)
+                self.research_log.insert(tk.END, result.stdout)
+                if result.stderr:
+                    self.research_log.insert(tk.END, "\nSTDERR:\n" + result.stderr)
+                if result.returncode == 0:
+                    results.append("Basic plots")
+                else:
+                    errors.append("Basic plots")
+            except Exception as e:
+                self.research_log.insert(tk.END, f"\nERROR: {str(e)}\n")
+                errors.append("Basic plots")
+            self.research_log.insert(tk.END, "\n")
+        
+        if self.plot_advanced.get():
+            self.research_log.insert(tk.END, "=== Generating Advanced Research Plots ===\n")
+            self.root.update()
+            try:
+                cmd = [sys.executable, "generate_advanced_plots.py"]
+                result = subprocess.run(cmd, capture_output=True, text=True, 
+                                      cwd=Path(__file__).parent)
+                self.research_log.insert(tk.END, result.stdout)
+                if result.stderr:
+                    self.research_log.insert(tk.END, "\nSTDERR:\n" + result.stderr)
+                if result.returncode == 0:
+                    results.append("Advanced plots")
+                else:
+                    errors.append("Advanced plots")
+            except Exception as e:
+                self.research_log.insert(tk.END, f"\nERROR: {str(e)}\n")
+                errors.append("Advanced plots")
+            self.research_log.insert(tk.END, "\n")
+        
+        # Summary
+        self.research_log.insert(tk.END, "="*60 + "\n")
+        self.research_log.insert(tk.END, "SUMMARY:\n")
+        if results:
+            self.research_log.insert(tk.END, f"✓ Successfully generated: {', '.join(results)}\n")
+        if errors:
+            self.research_log.insert(tk.END, f"⚠ Errors in: {', '.join(errors)}\n")
+        
+        if errors:
+            messagebox.showwarning("Partial Success", 
+                                  f"Generated: {', '.join(results)}\n\n"
+                                  f"Errors: {', '.join(errors)}\n\n"
+                                  "Check the log for details.")
+        elif results:
+            messagebox.showinfo("Success", f"All selected plots generated successfully!\n\n"
+                                         f"Generated: {', '.join(results)}")
+        else:
+            messagebox.showwarning("No Selection", "Please select at least one plot type.")
 
 def main():
     root = tk.Tk()
