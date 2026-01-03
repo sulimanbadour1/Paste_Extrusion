@@ -286,16 +286,16 @@ class StabilizerGUI:
         self.research_log.pack(fill=tk.BOTH, expand=True)
     
     def create_10_figures_tab(self):
-        """Tab 5: Generate 10 Paper Figures"""
+        """Tab 5: Generate Paper Figures"""
         frame = ttk.Frame(self.notebook)
-        self.notebook.add(frame, text="5. 10 Paper Figures")
+        self.notebook.add(frame, text="5. Paper Figures")
         
-        title = ttk.Label(frame, text="Generate 10 Paper Figures", 
+        title = ttk.Label(frame, text="Generate Paper Figures", 
                          font=("Arial", 14, "bold"))
         title.pack(pady=10)
         
         desc = ttk.Label(frame, 
-                        text="Generate exactly 10 figures for your research paper.\n"
+                        text="Generate figures for your research paper (23 available).\n"
                              "Figures are displayed interactively - save them manually using figure window controls.",
                         justify=tk.CENTER)
         desc.pack(pady=5)
@@ -319,7 +319,17 @@ class StabilizerGUI:
             '10': 'Fig. 10 — Resistance stability (boxplot)',
             '11': 'Fig. 11 — 3D Toolpath Comparison (Before/After)',
             '12': 'Fig. 12 — 3D Extrusion Rate Map',
-            '13': 'Fig. 13 — Effectiveness Dashboard'
+            '13': 'Fig. 13 — Effectiveness Dashboard',
+            '14': 'Fig. 14 — Print Completion Rate (Executive KPI)',
+            '15': 'Fig. 15 — Extrusion Onset Time Distribution',
+            '16': 'Fig. 16 — Flow Interruptions / Clogs per Print',
+            '17': 'Fig. 17 — Electrical Resistance Comparison',
+            '18': 'Fig. 18 — Middleware Pipeline Diagram',
+            '19': 'Fig. 19 — Ablation Study',
+            '20': 'Fig. 20 — Peak Pressure vs Failure Probability',
+            '21': 'Fig. 21 — Extrusion Width Uniformity',
+            '22': 'Fig. 22 — Energy / Motor Load Proxy',
+            '23': 'Fig. 23 — Time-Lapse Frame with Flow Annotation'
         }
         
         # Three columns of checkboxes
@@ -336,10 +346,10 @@ class StabilizerGUI:
         for i, (fig_num, desc) in enumerate(fig_descriptions.items()):
             var = tk.BooleanVar(value=True)
             self.fig_vars[fig_num] = var
-            # Split into 3 columns: 1-4, 5-8, 9-12
-            if int(fig_num) <= 4:
+            # Split into 3 columns: 1-8, 9-16, 17-23
+            if int(fig_num) <= 8:
                 parent = col1_frame
-            elif int(fig_num) <= 8:
+            elif int(fig_num) <= 16:
                 parent = col2_frame
             else:
                 parent = col3_frame

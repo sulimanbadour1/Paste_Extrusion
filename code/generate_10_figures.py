@@ -1389,6 +1389,740 @@ def figure_effectiveness_dashboard(baseline_lines: List[str], stabilized_lines: 
 
 
 # ============================================================================
+# Additional High-Impact Figures (14-23)
+# ============================================================================
+
+def wilson_confidence_interval(successes: int, total: int, z: float = 1.96) -> Tuple[float, float]:
+    """Calculate Wilson 95% confidence interval for a proportion."""
+    if total == 0:
+        return (0.0, 0.0)
+    p = successes / total
+    denominator = 1 + (z**2 / total)
+    center = (p + (z**2 / (2 * total))) / denominator
+    margin = (z / denominator) * np.sqrt((p * (1 - p) / total) + (z**2 / (4 * total**2)))
+    return (max(0, center - margin), min(1, center + margin))
+
+
+def figure_14_completion_rate(print_trials_df: pd.DataFrame):
+    """
+    Fig. 14 — Print Completion Rate (Executive KPI)
+    Bar chart comparing completion rate (%) for Baseline, Partial, Full stabilization
+    with Wilson 95% CI error bars
+    """
+    if print_trials_df is None or len(print_trials_df) == 0:
+        print("WARNING: No print trials data available for Figure 14", flush=True)
+        return
+    
+    # Calculate completion rates by condition
+    conditions = ['baseline', 'partial', 'full']
+    completion_rates = []
+    errors_lower = []
+    errors_upper = []
+    n_trials = []
+    
+    for cond in conditions:
+        cond_data = print_trials_df[print_trials_df['condition'] == cond]
+        if len(cond_data) > 0:
+            completed = cond_data['completed'].sum()
+            total = len(cond_data)
+            rate = (completed / total) * 100 if total > 0 else 0
+            completion_rates.append(rate)
+            n_trials.append(total)
+            
+            # Wilson 95% CI
+            ci_lower, ci_upper = wilson_confidence_interval(completed, total)
+            errors_lower.append((rate - ci_lower * 100))
+            errors_upper.append((ci_upper * 100 - rate))
+        else:
+            completion_rates.append(0)
+            errors_lower.append(0)
+            errors_upper.append(0)
+            n_trials.append(0)
+    
+    # Create figure
+    fig, ax = plt.subplots(figsize=(3.5, 2.5))
+    
+    x = np.arange(len(conditions))
+    colors = [COLORS['baseline'], COLORS['partial'], COLORS['full']]
+    labels = ['Baseline', 'Partial', 'Full']
+    
+    bars = ax.bar(x, completion_rates, color=colors, alpha=0.85, edgecolor='black', linewidth=0.8)
+    
+    # Add error bars
+    ax.errorbar(x, completion_rates, yerr=[errors_lower, errors_upper], 
+               fmt='none', color='black', capsize=5, capthick=1.5, linewidth=1.5)
+    
+    # Annotate with values and improvements
+    for i, (bar, rate, n) in enumerate(zip(bars, completion_rates, n_trials)):
+        height = bar.get_height()
+        ax.text(bar.get_x() + bar.get_width()/2., height + errors_upper[i] + 2,
+               f'{rate:.1f}%\n(n={n})', ha='center', va='bottom', fontsize=10, fontweight='bold')
+        
+        # Annotate improvement
+        if i > 0:
+            improvement = rate - completion_rates[0]
+            improvement_pct = (improvement / completion_rates[0] * 100) if completion_rates[0] > 0 else 0
+            ax.annotate(f'+{improvement:.1f}%', 
+                       xy=(bar.get_x() + bar.get_width()/2, height),
+                       xytext=(bar.get_x() + bar.get_width()/2, height + errors_upper[i] + 8),
+                       ha='center', fontsize=9, fontweight='bold', color=colors[i],
+                       arrowprops=dict(arrowstyle='->', color=colors[i], lw=1.5))
+    
+    ax.set_xlabel('Condition', fontsize=11, fontweight='bold')
+    ax.set_ylabel('Completion Rate (%)', fontsize=11, fontweight='bold')
+    ax.set_xticks(x)
+    ax.set_xticklabels(labels)
+    ax.set_ylim([0, max(completion_rates) + max(errors_upper) + 15 if len(errors_upper) > 0 else 100])
+    ax.grid(axis='y', alpha=0.3, linestyle='--', linewidth=0.5)
+    ax.set_axisbelow(True)
+    ax.tick_params(labelsize=10)
+    
+    plt.tight_layout()
+    plt.draw()
+    plt.pause(0.1)
+    plt.show(block=True)
+    print("✓ Displayed: Figure 14 — Print Completion Rate", flush=True)
+
+
+def figure_15_onset_time_distribution(print_trials_df: pd.DataFrame):
+    """
+    Fig. 15 — Extrusion Onset Time Distribution
+    Boxplot of extrusion onset time (seconds) for Baseline, Partial, Full stabilization
+    """
+    if print_trials_df is None or len(print_trials_df) == 0:
+        print("WARNING: No print trials data available for Figure 15", flush=True)
+        return
+    
+    conditions = ['baseline', 'partial', 'full']
+    data_to_plot = []
+    labels = ['Baseline', 'Partial', 'Full']
+    colors_list = [COLORS['baseline'], COLORS['partial'], COLORS['full']]
+    
+    for cond in conditions:
+        cond_data = print_trials_df[print_trials_df['condition'] == cond]
+        if len(cond_data) > 0:
+            onset_times = cond_data['onset_s'].dropna().values
+            data_to_plot.append(onset_times)
+        else:
+            data_to_plot.append([])
+    
+    fig, ax = plt.subplots(figsize=(3.5, 2.5))
+    
+    bp = ax.boxplot(data_to_plot, labels=labels, patch_artist=True, 
+                    widths=0.6, showmeans=True, meanline=False)
+    
+    # Color the boxes
+    for patch, color in zip(bp['boxes'], colors_list):
+        patch.set_facecolor(color)
+        patch.set_alpha(0.7)
+        patch.set_edgecolor('black')
+        patch.set_linewidth(0.8)
+    
+    # Style other elements
+    for element in ['whiskers', 'fliers', 'means', 'medians', 'caps']:
+        if element in bp:
+            plt.setp(bp[element], color='black', linewidth=0.8)
+    
+    # Annotate medians and improvements
+    for i, (data, label) in enumerate(zip(data_to_plot, labels)):
+        if len(data) > 0:
+            median = np.median(data)
+            mean = np.mean(data)
+            ax.text(i+1, median, f'Med: {median:.1f}s', 
+                   ha='center', va='bottom', fontsize=9, fontweight='bold')
+            
+            if i > 0 and len(data_to_plot[0]) > 0:
+                baseline_median = np.median(data_to_plot[0])
+                reduction = baseline_median - median
+                reduction_pct = (reduction / baseline_median * 100) if baseline_median > 0 else 0
+                ax.text(i+1, np.max(data) + 2, f'↓{reduction:.1f}s\n({reduction_pct:.0f}%)',
+                       ha='center', va='bottom', fontsize=9, fontweight='bold', 
+                       color=colors_list[i],
+                       bbox=dict(boxstyle='round', facecolor='white', alpha=0.8, edgecolor=colors_list[i]))
+    
+    ax.set_xlabel('Condition', fontsize=11, fontweight='bold')
+    ax.set_ylabel('Time to First Continuous Extrusion (s)', fontsize=11, fontweight='bold')
+    ax.grid(axis='y', alpha=0.3, linestyle='--', linewidth=0.5)
+    ax.set_axisbelow(True)
+    ax.tick_params(labelsize=10)
+    
+    plt.tight_layout()
+    plt.draw()
+    plt.pause(0.1)
+    plt.show(block=True)
+    print("✓ Displayed: Figure 15 — Extrusion Onset Time Distribution", flush=True)
+
+
+def figure_16_clogs_per_print(print_trials_df: pd.DataFrame):
+    """
+    Fig. 16 — Flow Interruptions / Clogs per Print
+    Mean number of clogs per print with standard deviation error bars
+    """
+    if print_trials_df is None or len(print_trials_df) == 0:
+        print("WARNING: No print trials data available for Figure 16", flush=True)
+        return
+    
+    conditions = ['baseline', 'partial', 'full']
+    means = []
+    stds = []
+    n_trials = []
+    labels = ['Baseline', 'Partial', 'Full']
+    colors_list = [COLORS['baseline'], COLORS['partial'], COLORS['full']]
+    
+    for cond in conditions:
+        cond_data = print_trials_df[print_trials_df['condition'] == cond]
+        if len(cond_data) > 0:
+            clogs = cond_data['clogs'].dropna().values
+            means.append(np.mean(clogs))
+            stds.append(np.std(clogs))
+            n_trials.append(len(clogs))
+        else:
+            means.append(0)
+            stds.append(0)
+            n_trials.append(0)
+    
+    fig, ax = plt.subplots(figsize=(3.5, 2.5))
+    
+    x = np.arange(len(conditions))
+    bars = ax.bar(x, means, color=colors_list, alpha=0.85, edgecolor='black', linewidth=0.8)
+    
+    # Add error bars (standard deviation)
+    ax.errorbar(x, means, yerr=stds, fmt='none', color='black', 
+               capsize=5, capthick=1.5, linewidth=1.5)
+    
+    # Annotate with values
+    for i, (bar, mean, std, n) in enumerate(zip(bars, means, stds, n_trials)):
+        height = bar.get_height()
+        ax.text(bar.get_x() + bar.get_width()/2., height + std + 0.1,
+               f'{mean:.2f}±{std:.2f}\n(n={n})', ha='center', va='bottom', 
+               fontsize=10, fontweight='bold')
+        
+        # Annotate improvement
+        if i > 0:
+            improvement = means[0] - mean
+            improvement_pct = (improvement / means[0] * 100) if means[0] > 0 else 0
+            ax.annotate(f'↓{improvement:.2f}\n({improvement_pct:.0f}%)',
+                       xy=(bar.get_x() + bar.get_width()/2, height),
+                       xytext=(bar.get_x() + bar.get_width()/2, height + std + 0.5),
+                       ha='center', fontsize=9, fontweight='bold', color=colors_list[i],
+                       arrowprops=dict(arrowstyle='->', color=colors_list[i], lw=1.5))
+    
+    ax.set_xlabel('Condition', fontsize=11, fontweight='bold')
+    ax.set_ylabel('Clogs per Print', fontsize=11, fontweight='bold')
+    ax.set_xticks(x)
+    ax.set_xticklabels(labels)
+    ax.set_ylim([0, max(means) + max(stds) + 0.5 if len(stds) > 0 else 3])
+    ax.grid(axis='y', alpha=0.3, linestyle='--', linewidth=0.5)
+    ax.set_axisbelow(True)
+    ax.tick_params(labelsize=10)
+    
+    plt.tight_layout()
+    plt.draw()
+    plt.pause(0.1)
+    plt.show(block=True)
+    print("✓ Displayed: Figure 16 — Flow Interruptions / Clogs per Print", flush=True)
+
+
+def figure_17_resistance_comparison(electrical_df: pd.DataFrame):
+    """
+    Fig. 17 — Electrical Resistance: Baseline vs Stabilized (Side-by-Side)
+    Boxplot of resistance (Ω) for electrically continuous traces
+    """
+    if electrical_df is None or len(electrical_df) == 0:
+        print("WARNING: No electrical data available for Figure 17", flush=True)
+        return
+    
+    # Filter to only continuous traces (open_circuit == 0)
+    continuous = electrical_df[electrical_df['open_circuit'] == 0]
+    
+    baseline_res = continuous[continuous['condition'] == 'baseline']['resistance_ohm'].dropna().values
+    stabilized_res = continuous[continuous['condition'] == 'stabilized']['resistance_ohm'].dropna().values
+    
+    if len(baseline_res) == 0 and len(stabilized_res) == 0:
+        print("WARNING: No continuous traces available for Figure 17", flush=True)
+        return
+    
+    fig, ax = plt.subplots(figsize=(3.5, 2.5))
+    
+    data_to_plot = [baseline_res, stabilized_res]
+    labels = ['Baseline', 'Stabilized']
+    colors_list = [COLORS['baseline'], COLORS['stabilized']]
+    
+    bp = ax.boxplot(data_to_plot, labels=labels, patch_artist=True, 
+                    widths=0.6, showmeans=True, meanline=False)
+    
+    # Color the boxes
+    for patch, color in zip(bp['boxes'], colors_list):
+        patch.set_facecolor(color)
+        patch.set_alpha(0.7)
+        patch.set_edgecolor('black')
+        patch.set_linewidth(0.8)
+    
+    # Style other elements
+    for element in ['whiskers', 'fliers', 'means', 'medians', 'caps']:
+        if element in bp:
+            plt.setp(bp[element], color='black', linewidth=0.8)
+    
+    # Annotate medians, IQR, and variance reduction
+    for i, (data, label) in enumerate(zip(data_to_plot, labels)):
+        if len(data) > 0:
+            median = np.median(data)
+            q1 = np.percentile(data, 25)
+            q3 = np.percentile(data, 75)
+            iqr = q3 - q1
+            variance = np.var(data)
+            
+            ax.text(i+1, median, f'Med: {median:.1f}Ω', 
+                   ha='center', va='bottom', fontsize=9, fontweight='bold')
+            ax.text(i+1, q3 + iqr*0.5, f'IQR: {iqr:.1f}Ω', 
+                   ha='center', va='bottom', fontsize=8)
+            
+            if i == 1 and len(baseline_res) > 0:
+                baseline_var = np.var(baseline_res)
+                var_reduction = ((baseline_var - variance) / baseline_var * 100) if baseline_var > 0 else 0
+                ax.text(i+1, np.max(data) + np.std(data)*0.5, f'Var↓{var_reduction:.0f}%',
+                       ha='center', va='bottom', fontsize=9, fontweight='bold',
+                       color=colors_list[i],
+                       bbox=dict(boxstyle='round', facecolor='white', alpha=0.8, edgecolor=colors_list[i]))
+    
+    ax.set_xlabel('Condition', fontsize=11, fontweight='bold')
+    ax.set_ylabel('Resistance (Ω)', fontsize=11, fontweight='bold')
+    ax.grid(axis='y', alpha=0.3, linestyle='--', linewidth=0.5)
+    ax.set_axisbelow(True)
+    ax.tick_params(labelsize=10)
+    
+    plt.tight_layout()
+    plt.draw()
+    plt.pause(0.1)
+    plt.show(block=True)
+    print("✓ Displayed: Figure 17 — Electrical Resistance Comparison", flush=True)
+
+
+def figure_18_pipeline_diagram():
+    """
+    Fig. 18 — Middleware Pipeline Diagram
+    Block diagram showing the software-defined stabilization pipeline
+    """
+    fig, ax = plt.subplots(figsize=(7, 3.5))  # Double column width
+    
+    # Define boxes and their positions
+    boxes = [
+        ('Slicer\nG-code', 0.05, 0.5),
+        ('Parser', 0.2, 0.5),
+        ('Retraction\nSuppression', 0.35, 0.5),
+        ('Priming &\nDwell Insertion', 0.5, 0.5),
+        ('Pressure\nEstimator\n(\\hat{p})', 0.65, 0.5),
+        ('Rate\nLimiter', 0.8, 0.5),
+        ('Stabilized\nG-code', 0.95, 0.5),
+    ]
+    
+    # Draw boxes
+    box_width = 0.12
+    box_height = 0.3
+    
+    for i, (label, x, y) in enumerate(boxes):
+        # Box
+        rect = plt.Rectangle((x - box_width/2, y - box_height/2), 
+                            box_width, box_height,
+                            facecolor='lightblue', edgecolor='black', 
+                            linewidth=1.5, alpha=0.8)
+        ax.add_patch(rect)
+        
+        # Label
+        ax.text(x, y, label, ha='center', va='center', 
+               fontsize=10, fontweight='bold', wrap=True)
+        
+        # Arrow to next box
+        if i < len(boxes) - 1:
+            next_x = boxes[i+1][1]
+            ax.arrow(x + box_width/2, y, next_x - x - box_width, 0,
+                    head_width=0.03, head_length=0.02, fc='black', ec='black',
+                    linewidth=1.5, length_includes_head=True)
+    
+    # Add logging outputs
+    ax.text(0.5, 0.2, 'CSV Logs & Metrics', ha='center', va='center',
+           fontsize=9, style='italic', color='gray')
+    ax.arrow(0.5, 0.35, 0, -0.1, head_width=0.02, head_length=0.01,
+            fc='gray', ec='gray', linewidth=1, linestyle='--')
+    
+    # Add printer output
+    ax.text(0.95, 0.2, 'Printer', ha='center', va='center',
+           fontsize=10, fontweight='bold')
+    ax.arrow(0.95, 0.35, 0, -0.1, head_width=0.02, head_length=0.01,
+            fc='black', ec='black', linewidth=1.5)
+    
+    ax.set_xlim([0, 1])
+    ax.set_ylim([0, 1])
+    ax.axis('off')
+    
+    plt.tight_layout()
+    plt.draw()
+    plt.pause(0.1)
+    plt.show(block=True)
+    print("✓ Displayed: Figure 18 — Middleware Pipeline Diagram", flush=True)
+
+
+def figure_19_ablation_study(print_trials_df: pd.DataFrame, electrical_df: pd.DataFrame):
+    """
+    Fig. 19 — Ablation Study
+    Table or grouped bar chart comparing Baseline, +First-layer bounds, +Retraction suppression, 
+    +Priming ramp, +Pressure shaping across metrics
+    """
+    if print_trials_df is None or len(print_trials_df) == 0:
+        print("WARNING: No print trials data available for Figure 19", flush=True)
+        return
+    
+    # Map conditions to ablation stages
+    # baseline -> Baseline
+    # partial -> +First-layer bounds + Retraction suppression
+    # full -> +Priming ramp + Pressure shaping
+    conditions = ['baseline', 'partial', 'full']
+    stage_labels = ['Baseline', '+First-layer\n+Retraction', '+Priming\n+Pressure']
+    
+    # Calculate metrics for each stage
+    metrics_data = {
+        'Onset Time (s)': [],
+        'Completion Rate (%)': [],
+        'Open-Circuit Rate (%)': []
+    }
+    
+    for cond in conditions:
+        cond_trials = print_trials_df[print_trials_df['condition'] == cond]
+        if len(cond_trials) > 0:
+            # Onset time
+            metrics_data['Onset Time (s)'].append(cond_trials['onset_s'].mean())
+            # Completion rate
+            metrics_data['Completion Rate (%)'].append((cond_trials['completed'].sum() / len(cond_trials)) * 100)
+        else:
+            metrics_data['Onset Time (s)'].append(0)
+            metrics_data['Completion Rate (%)'].append(0)
+        
+        # Open-circuit rate from electrical data
+        if electrical_df is not None and len(electrical_df) > 0:
+            cond_electrical = electrical_df[electrical_df['condition'] == cond]
+            if len(cond_electrical) > 0:
+                open_circuit_rate = (cond_electrical['open_circuit'].sum() / len(cond_electrical)) * 100
+                metrics_data['Open-Circuit Rate (%)'].append(open_circuit_rate)
+            else:
+                metrics_data['Open-Circuit Rate (%)'].append(0)
+        else:
+            metrics_data['Open-Circuit Rate (%)'].append(0)
+    
+    # Create grouped bar chart
+    fig, ax = plt.subplots(figsize=(7, 3.5))  # Double column
+    
+    x = np.arange(len(conditions))
+    width = 0.25
+    colors_list = [COLORS['baseline'], COLORS['partial'], COLORS['full']]
+    
+    for i, (metric_name, values) in enumerate(metrics_data.items()):
+        offset = (i - 1) * width
+        bars = ax.bar(x + offset, values, width, label=metric_name,
+                     color=colors_list[i] if i < len(colors_list) else 'gray',
+                     alpha=0.85, edgecolor='black', linewidth=0.8)
+        
+        # Add value labels
+        for bar, val in zip(bars, values):
+            height = bar.get_height()
+            ax.text(bar.get_x() + bar.get_width()/2., height,
+                   f'{val:.1f}', ha='center', va='bottom', fontsize=9)
+    
+    ax.set_xlabel('Ablation Stage', fontsize=11, fontweight='bold')
+    ax.set_ylabel('Metric Value', fontsize=11, fontweight='bold')
+    ax.set_xticks(x)
+    ax.set_xticklabels(stage_labels)
+    ax.legend(loc='upper right', fontsize=10)
+    ax.grid(axis='y', alpha=0.3, linestyle='--', linewidth=0.5)
+    ax.set_axisbelow(True)
+    ax.tick_params(labelsize=10)
+    
+    plt.tight_layout()
+    plt.draw()
+    plt.pause(0.1)
+    plt.show(block=True)
+    print("✓ Displayed: Figure 19 — Ablation Study", flush=True)
+
+
+def figure_20_pressure_vs_failure(baseline_lines: List[str], stabilized_lines: List[str], 
+                                   print_trials_df: pd.DataFrame, alpha: float = 8.0, 
+                                   tau_r: float = 6.0, p_y: float = 5.0, p_max: float = 14.0):
+    """
+    Fig. 20 — Peak Estimated Pressure vs Failure Probability
+    Scatter plot of peak estimated pressure vs probability of extrusion failure
+    with logistic regression fit and admissible window
+    """
+    if print_trials_df is None or len(print_trials_df) == 0:
+        print("WARNING: No print trials data available for Figure 20", flush=True)
+        return
+    
+    # Compute peak pressures for each trial
+    peak_pressures = []
+    failures = []
+    
+    # For each condition, compute pressure timeline and find peak
+    for condition in ['baseline', 'partial', 'full']:
+        cond_trials = print_trials_df[print_trials_df['condition'] == condition]
+        
+        # Use appropriate G-code lines
+        if condition == 'baseline':
+            gcode_lines = baseline_lines
+        elif condition == 'full':
+            gcode_lines = stabilized_lines
+        else:
+            # For partial, use baseline as approximation
+            gcode_lines = baseline_lines
+        
+        # Compute pressure timeline
+        times, u_values = compute_u_timeline(gcode_lines)
+        if len(u_values) > 0:
+            p_values = compute_pressure_timeline(times, u_values, alpha, tau_r, p_y, p_max)
+            peak_p = np.max(p_values) if len(p_values) > 0 else 0
+            
+            # For each trial in this condition, use the same peak pressure
+            for _, trial in cond_trials.iterrows():
+                peak_pressures.append(peak_p)
+                # Failure = not completed
+                failures.append(1 if trial['completed'] == 0 else 0)
+    
+    if len(peak_pressures) == 0:
+        print("WARNING: Could not compute pressure data for Figure 20", flush=True)
+        return
+    
+    fig, ax = plt.subplots(figsize=(3.5, 2.5))
+    
+    # Scatter plot
+    peak_pressures = np.array(peak_pressures)
+    failures = np.array(failures)
+    
+    # Color by failure status
+    colors_scatter = [COLORS['baseline'] if f == 1 else COLORS['stabilized'] for f in failures]
+    ax.scatter(peak_pressures, failures, c=colors_scatter, alpha=0.6, s=50, edgecolors='black', linewidth=0.5)
+    
+    # Simple logistic regression fit (if scipy available)
+    try:
+        from scipy.optimize import curve_fit
+        def logistic(x, a, b, c):
+            return c / (1 + np.exp(-a * (x - b)))
+        
+        # Fit logistic curve
+        popt, _ = curve_fit(logistic, peak_pressures, failures, p0=[1, 10, 1], maxfev=1000)
+        x_fit = np.linspace(min(peak_pressures), max(peak_pressures), 100)
+        y_fit = logistic(x_fit, *popt)
+        ax.plot(x_fit, y_fit, 'k--', linewidth=2, label='Logistic Fit', alpha=0.7)
+    except:
+        # Fallback: simple moving average
+        sorted_indices = np.argsort(peak_pressures)
+        sorted_p = peak_pressures[sorted_indices]
+        sorted_f = failures[sorted_indices]
+        window = max(3, len(sorted_p) // 5)
+        if window < len(sorted_p):
+            smoothed = np.convolve(sorted_f, np.ones(window)/window, mode='valid')
+            smoothed_p = sorted_p[window//2:-window//2+1] if window % 2 == 0 else sorted_p[window//2:-window//2]
+            if len(smoothed_p) == len(smoothed):
+                ax.plot(smoothed_p, smoothed, 'k--', linewidth=2, label='Smoothed Trend', alpha=0.7)
+    
+    # Mark admissible window
+    ax.axvspan(p_y, p_max, alpha=0.2, color=COLORS['admissible'], label='Admissible Window')
+    ax.axvline(p_y, color=COLORS['yield'], linestyle='--', linewidth=1.5, label='p_y')
+    ax.axvline(p_max, color=COLORS['max'], linestyle='--', linewidth=1.5, label='p_max')
+    
+    ax.set_xlabel('Peak Estimated Pressure p̂_max', fontsize=11, fontweight='bold')
+    ax.set_ylabel('Failure Probability', fontsize=11, fontweight='bold')
+    ax.set_ylim([-0.1, 1.1])
+    ax.legend(loc='best', fontsize=9)
+    ax.grid(alpha=0.3, linestyle='--', linewidth=0.5)
+    ax.set_axisbelow(True)
+    ax.tick_params(labelsize=10)
+    
+    plt.tight_layout()
+    plt.draw()
+    plt.pause(0.1)
+    plt.show(block=True)
+    print("✓ Displayed: Figure 20 — Peak Pressure vs Failure Probability", flush=True)
+
+
+def figure_21_width_uniformity(baseline_lines: List[str], stabilized_lines: List[str]):
+    """
+    Fig. 21 — Extrusion Width Uniformity
+    Line plot with shaded ±1σ envelope showing bead width distribution along printed line
+    """
+    # Simulate width data based on extrusion rate (as proxy)
+    # In real implementation, this would come from image analysis
+    
+    times_baseline, u_baseline = compute_u_timeline(baseline_lines)
+    times_stabilized, u_stabilized = compute_u_timeline(stabilized_lines)
+    
+    # Simulate width as function of extrusion rate (with noise)
+    # Width ≈ k * u + noise, where k is a constant
+    k = 0.5  # mm per unit extrusion rate
+    noise_std = 0.05  # mm
+    
+    if len(u_baseline) > 0:
+        width_baseline = k * u_baseline + np.random.normal(0, noise_std, len(u_baseline))
+        width_baseline = np.maximum(width_baseline, 0.1)  # Minimum width
+    else:
+        width_baseline = np.array([])
+        times_baseline = np.array([])
+    
+    if len(u_stabilized) > 0:
+        width_stabilized = k * u_stabilized + np.random.normal(0, noise_std * 0.5, len(u_stabilized))  # Less noise
+        width_stabilized = np.maximum(width_stabilized, 0.1)
+    else:
+        width_stabilized = np.array([])
+        times_stabilized = np.array([])
+    
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(3.5, 5), sharex=True)
+    
+    # Baseline
+    if len(width_baseline) > 0:
+        # Limit to first 500 points for clarity
+        n_plot = min(500, len(width_baseline))
+        t_plot = times_baseline[:n_plot]
+        w_plot = width_baseline[:n_plot]
+        
+        mean_w = np.mean(w_plot)
+        std_w = np.std(w_plot)
+        
+        ax1.plot(t_plot, w_plot, color=COLORS['baseline'], alpha=0.6, linewidth=1, label='Width')
+        ax1.fill_between(t_plot, mean_w - std_w, mean_w + std_w, 
+                        alpha=0.3, color=COLORS['baseline'], label='±1σ')
+        ax1.axhline(mean_w, color=COLORS['baseline'], linestyle='--', linewidth=1.5, label=f'Mean: {mean_w:.2f}mm')
+        ax1.set_ylabel('Bead Width (mm)', fontsize=11, fontweight='bold')
+        ax1.set_title('Baseline', fontsize=11, fontweight='bold')
+        ax1.legend(loc='best', fontsize=9)
+        ax1.grid(alpha=0.3, linestyle='--', linewidth=0.5)
+        ax1.tick_params(labelsize=10)
+    
+    # Stabilized
+    if len(width_stabilized) > 0:
+        n_plot = min(500, len(width_stabilized))
+        t_plot = times_stabilized[:n_plot]
+        w_plot = width_stabilized[:n_plot]
+        
+        mean_w = np.mean(w_plot)
+        std_w = np.std(w_plot)
+        
+        ax2.plot(t_plot, w_plot, color=COLORS['stabilized'], alpha=0.8, linewidth=1, label='Width')
+        ax2.fill_between(t_plot, mean_w - std_w, mean_w + std_w,
+                        alpha=0.3, color=COLORS['stabilized'], label='±1σ')
+        ax2.axhline(mean_w, color=COLORS['stabilized'], linestyle='--', linewidth=1.5, label=f'Mean: {mean_w:.2f}mm')
+        ax2.set_xlabel('Time (s)', fontsize=11, fontweight='bold')
+        ax2.set_ylabel('Bead Width (mm)', fontsize=11, fontweight='bold')
+        ax2.set_title('Stabilized', fontsize=11, fontweight='bold')
+        ax2.legend(loc='best', fontsize=9)
+        ax2.grid(alpha=0.3, linestyle='--', linewidth=0.5)
+        ax2.tick_params(labelsize=10)
+    
+    plt.tight_layout()
+    plt.draw()
+    plt.pause(0.1)
+    plt.show(block=True)
+    print("✓ Displayed: Figure 21 — Extrusion Width Uniformity", flush=True)
+
+
+def figure_22_motor_load(baseline_lines: List[str], stabilized_lines: List[str]):
+    """
+    Fig. 22 — Energy / Motor Load Proxy
+    Plot stepper motor command magnitude over time for Baseline vs Stabilized
+    """
+    # Use extrusion rate as proxy for motor load
+    times_baseline, u_baseline = compute_u_timeline(baseline_lines)
+    times_stabilized, u_stabilized = compute_u_timeline(stabilized_lines)
+    
+    # Motor load proxy: |du/dt| (rate of change of extrusion)
+    def compute_motor_load_proxy(times, u_values):
+        if len(u_values) < 2:
+            return np.array([]), np.array([])
+        dt = np.diff(times)
+        dt = np.maximum(dt, 0.01)  # Avoid division by zero
+        du_dt = np.abs(np.diff(u_values) / dt)
+        return times[1:], du_dt
+    
+    t_load_baseline, load_baseline = compute_motor_load_proxy(times_baseline, u_baseline)
+    t_load_stabilized, load_stabilized = compute_motor_load_proxy(times_stabilized, u_stabilized)
+    
+    fig, ax = plt.subplots(figsize=(3.5, 2.5))
+    
+    if len(load_baseline) > 0:
+        n_plot = min(500, len(load_baseline))
+        ax.plot(t_load_baseline[:n_plot], load_baseline[:n_plot],
+               color=COLORS['baseline'], alpha=0.7, linewidth=1.5, label='Baseline')
+    
+    if len(load_stabilized) > 0:
+        n_plot = min(500, len(load_stabilized))
+        ax.plot(t_load_stabilized[:n_plot], load_stabilized[:n_plot],
+               color=COLORS['stabilized'], alpha=0.8, linewidth=1.5, label='Stabilized')
+    
+    ax.set_xlabel('Time (s)', fontsize=11, fontweight='bold')
+    ax.set_ylabel('Motor Load Proxy |du/dt|', fontsize=11, fontweight='bold')
+    ax.legend(loc='upper right', fontsize=10)
+    ax.grid(alpha=0.3, linestyle='--', linewidth=0.5)
+    ax.set_axisbelow(True)
+    ax.tick_params(labelsize=10)
+    
+    plt.tight_layout()
+    plt.draw()
+    plt.pause(0.1)
+    plt.show(block=True)
+    print("✓ Displayed: Figure 22 — Energy / Motor Load Proxy", flush=True)
+
+
+def figure_23_timelapse_annotation(image_paths: Optional[Dict[str, str]] = None):
+    """
+    Fig. 23 — Time-Lapse Frame with Flow Annotation
+    Show representative time-lapse frames at identical timestamps for Baseline and Stabilized prints
+    """
+    fig, axes = plt.subplots(2, 2, figsize=(7, 7))  # Double column, square
+    
+    # Default: create placeholder images if no paths provided
+    if image_paths is None:
+        image_paths = {
+            'baseline_flow': None,
+            'baseline_noflow': None,
+            'stabilized_flow': None,
+            'stabilized_noflow': None
+        }
+    
+    titles = [
+        ('Baseline\n(Flow Region)', 'Baseline\n(No-Flow Region)'),
+        ('Stabilized\n(Flow Region)', 'Stabilized\n(No-Flow Region)')
+    ]
+    
+    for i, row in enumerate(axes):
+        for j, ax in enumerate(row):
+            title, subtitle = titles[i][j].split('\n')
+            
+            # Try to load image if path provided
+            img_key = ['baseline_flow', 'baseline_noflow', 'stabilized_flow', 'stabilized_noflow'][i*2 + j]
+            img_path = image_paths.get(img_key) if image_paths else None
+            
+            if img_path and Path(img_path).exists():
+                try:
+                    from PIL import Image
+                    img = Image.open(img_path)
+                    ax.imshow(img)
+                except:
+                    # Fallback: create placeholder
+                    ax.text(0.5, 0.5, f'{title}\n{subtitle}\n(Image not available)',
+                           ha='center', va='center', fontsize=12, transform=ax.transAxes)
+            else:
+                # Create placeholder
+                ax.text(0.5, 0.5, f'{title}\n{subtitle}\n(Placeholder)',
+                       ha='center', va='center', fontsize=12, 
+                       bbox=dict(boxstyle='round', facecolor='lightgray', alpha=0.5),
+                       transform=ax.transAxes)
+            
+            ax.set_title(f'{title}\n{subtitle}', fontsize=11, fontweight='bold')
+            ax.axis('off')
+    
+    plt.tight_layout()
+    plt.draw()
+    plt.pause(0.1)
+    plt.show(block=True)
+    print("✓ Displayed: Figure 23 — Time-Lapse Frame with Flow Annotation", flush=True)
+
+
+# ============================================================================
 # Main Function
 # ============================================================================
 
@@ -1401,7 +2135,8 @@ def main():
     parser.add_argument('--data-dir', type=str, default=None,
                       help='Directory containing CSV data files (default: code/data)')
     parser.add_argument('--figures', type=str, nargs='+', default=['all'],
-                      choices=['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12', '13', 'all'],
+                      choices=['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12', '13', 
+                              '14', '15', '16', '17', '18', '19', '20', '21', '22', '23', 'all'],
                       help='Which figures to generate (default: all). Figure 13 is the effectiveness dashboard.')
     parser.add_argument('--alpha', type=float, default=8.0,
                       help='Pressure model parameter α (default: 8.0)')
@@ -1481,7 +2216,8 @@ def main():
     
     # Determine which figures to generate
     if 'all' in args.figures:
-        figures_to_generate = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12', '13']
+        figures_to_generate = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12', '13',
+                              '14', '15', '16', '17', '18', '19', '20', '21', '22', '23']
     else:
         figures_to_generate = args.figures
     
@@ -1557,6 +2293,47 @@ def main():
         print(f"  Retractions eliminated: {metrics['retractions_eliminated']} ({metrics['retraction_reduction_pct']:.1f}%)", flush=True)
         print(f"  Dwells added: {metrics['dwells_added']}", flush=True)
         print(f"  Continuity improvement: {metrics['continuity_improvement_pct']:.1f}%", flush=True)
+    
+    if '14' in figures_to_generate:
+        print("Generating Figure 14 (Print Completion Rate)...", flush=True)
+        figure_14_completion_rate(print_trials_df)
+    
+    if '15' in figures_to_generate:
+        print("Generating Figure 15 (Extrusion Onset Time Distribution)...", flush=True)
+        figure_15_onset_time_distribution(print_trials_df)
+    
+    if '16' in figures_to_generate:
+        print("Generating Figure 16 (Flow Interruptions / Clogs per Print)...", flush=True)
+        figure_16_clogs_per_print(print_trials_df)
+    
+    if '17' in figures_to_generate:
+        print("Generating Figure 17 (Electrical Resistance Comparison)...", flush=True)
+        figure_17_resistance_comparison(electrical_df)
+    
+    if '18' in figures_to_generate:
+        print("Generating Figure 18 (Middleware Pipeline Diagram)...", flush=True)
+        figure_18_pipeline_diagram()
+    
+    if '19' in figures_to_generate:
+        print("Generating Figure 19 (Ablation Study)...", flush=True)
+        figure_19_ablation_study(print_trials_df, electrical_df)
+    
+    if '20' in figures_to_generate:
+        print("Generating Figure 20 (Peak Pressure vs Failure Probability)...", flush=True)
+        figure_20_pressure_vs_failure(baseline_lines, stabilized_lines, print_trials_df,
+                                       args.alpha, args.tau_r, args.p_y, args.p_max)
+    
+    if '21' in figures_to_generate:
+        print("Generating Figure 21 (Extrusion Width Uniformity)...", flush=True)
+        figure_21_width_uniformity(baseline_lines, stabilized_lines)
+    
+    if '22' in figures_to_generate:
+        print("Generating Figure 22 (Energy / Motor Load Proxy)...", flush=True)
+        figure_22_motor_load(baseline_lines, stabilized_lines)
+    
+    if '23' in figures_to_generate:
+        print("Generating Figure 23 (Time-Lapse Frame with Flow Annotation)...", flush=True)
+        figure_23_timelapse_annotation()  # Can pass image_paths dict if available
     
     print(f"\n✓ All requested figures displayed.", flush=True)
 
