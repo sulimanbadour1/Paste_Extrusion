@@ -2,6 +2,13 @@
 """
 paper_figs.py
 
+
+use this code to generate the figures for the paper.
+
+cd code
+python3 paper_figs.py --baseline-gcode test.gcode --stabilized-gcode results/stabilized.gcode --figures all
+
+
 Generates the final 9 publication-ready figures for the paste extrusion stabilization paper.
 These are the exact figures reviewers will see - polished, professional, and impactful.
 """
@@ -300,10 +307,46 @@ def wilson_confidence_interval(successes: int, total: int, z: float = 1.96) -> T
 
 
 # ============================================================================
+# Display/Save Helper
+# ============================================================================
+
+def display_or_save_figure(fig, figure_num: int, figure_name: str, 
+                          save_mode: bool = False, output_dir: Optional[Path] = None):
+    """Display figure interactively or save to file."""
+    plt.tight_layout()
+    
+    if save_mode:
+        if output_dir is None:
+            output_dir = Path(__file__).parent / 'results' / 'figures' / 'paper_figs'
+        output_dir.mkdir(parents=True, exist_ok=True)
+        output_path = output_dir / f'paper_fig_{figure_num}.png'
+        fig.savefig(output_path, dpi=300, bbox_inches='tight', facecolor='white')
+        print(f"✓ Saved: {output_path}", flush=True)
+        plt.close(fig)
+    else:
+        try:
+            plt.draw()
+            plt.pause(0.1)
+            plt.show(block=True)
+            print(f"✓ Displayed: Figure {figure_num} — {figure_name}", flush=True)
+        except Exception as e:
+            print(f"Warning: Could not display figure interactively: {e}", flush=True)
+            print("Saving figure to file instead...", flush=True)
+            if output_dir is None:
+                output_dir = Path(__file__).parent / 'results' / 'figures' / 'paper_figs'
+            output_dir.mkdir(parents=True, exist_ok=True)
+            output_path = output_dir / f'paper_fig_{figure_num}.png'
+            fig.savefig(output_path, dpi=300, bbox_inches='tight', facecolor='white')
+            print(f"✓ Saved: {output_path}", flush=True)
+            plt.close(fig)
+
+
+# ============================================================================
 # Final Paper Figures (9 Figures)
 # ============================================================================
 
-def figure_1_gcode_modification_summary(baseline_lines: List[str], stabilized_lines: List[str]):
+def figure_1_gcode_modification_summary(baseline_lines: List[str], stabilized_lines: List[str],
+                                        save_mode: bool = False, output_dir: Optional[Path] = None):
     """
     Figure 1: G-code modification summary
     Enhanced grouped bar chart with annotations and visual appeal
@@ -359,14 +402,11 @@ def figure_1_gcode_modification_summary(baseline_lines: List[str], stabilized_li
     ax.grid(axis='y', alpha=0.4, linestyle='--', linewidth=0.8)
     ax.set_axisbelow(True)
     
-    plt.tight_layout()
-    plt.draw()
-    plt.pause(0.1)
-    plt.show(block=True)
-    print("✓ Displayed: Figure 1 — G-code Modification Summary", flush=True)
+    display_or_save_figure(fig, 1, "G-code Modification Summary", save_mode, output_dir)
 
 
-def figure_2_extrusion_rate_comparison(baseline_lines: List[str], stabilized_lines: List[str]):
+def figure_2_extrusion_rate_comparison(baseline_lines: List[str], stabilized_lines: List[str],
+                                        save_mode: bool = False, output_dir: Optional[Path] = None):
     """
     Figure 2: Extrusion-rate proxy (baseline vs stabilized)
     Side-by-side comparison with enhanced styling
@@ -405,16 +445,13 @@ def figure_2_extrusion_rate_comparison(baseline_lines: List[str], stabilized_lin
     ax2.set_axisbelow(True)
     ax2.legend(fontsize=11, framealpha=0.95, edgecolor='black')
     
-    plt.tight_layout()
-    plt.draw()
-    plt.pause(0.1)
-    plt.show(block=True)
-    print("✓ Displayed: Figure 2 — Extrusion-Rate Proxy Comparison", flush=True)
+    display_or_save_figure(fig, 2, "Extrusion-Rate Proxy Comparison", save_mode, output_dir)
 
 
 def figure_3_pressure_comparison(baseline_lines: List[str], stabilized_lines: List[str],
                                   alpha: float = 8.0, tau_r: float = 6.0,
-                                  p_y: float = 5.0, p_max: float = 14.0):
+                                  p_y: float = 5.0, p_max: float = 14.0,
+                                  save_mode: bool = False, output_dir: Optional[Path] = None):
     """
     Figure 3: Pressure estimate (baseline vs stabilized)
     Side-by-side with admissible window highlighted
@@ -458,14 +495,11 @@ def figure_3_pressure_comparison(baseline_lines: List[str], stabilized_lines: Li
     ax2.set_axisbelow(True)
     ax2.legend(fontsize=10, framealpha=0.95, edgecolor='black', loc='upper right')
     
-    plt.tight_layout()
-    plt.draw()
-    plt.pause(0.1)
-    plt.show(block=True)
-    print("✓ Displayed: Figure 3 — Pressure Estimate Comparison", flush=True)
+    display_or_save_figure(fig, 3, "Pressure Estimate Comparison", save_mode, output_dir)
 
 
-def figure_4_extrusion_survival(print_trials_df: pd.DataFrame):
+def figure_4_extrusion_survival(print_trials_df: pd.DataFrame,
+                                 save_mode: bool = False, output_dir: Optional[Path] = None):
     """
     Figure 4: Extrusion survival curve
     Kaplan-Meier survival curve with enhanced styling
@@ -481,16 +515,39 @@ def figure_4_extrusion_survival(print_trials_df: pd.DataFrame):
     condition_colors = [COLORS['baseline'], COLORS['partial'], COLORS['stabilized']]
     
     for cond, label, color in zip(conditions, condition_labels, condition_colors):
-        cond_data = print_trials_df[print_trials_df['condition'] == cond]
+        cond_data = print_trials_df[print_trials_df['condition'] == cond].copy()
         if len(cond_data) > 0:
             # Use flow_duration_s as survival time, completed==0 as event
-            times = cond_data['flow_duration_s'].values
-            events = (cond_data['completed'] == 0).astype(int)  # 1 = failure, 0 = censored
+            times = cond_data['flow_duration_s'].dropna().values
+            events = (cond_data['completed'] == 0).astype(int).values  # 1 = failure, 0 = censored
             
-            if SCIPY_AVAILABLE:
-                time, survival_prob = kaplan_meier_estimator(events == 0, times)
-                ax.step(time, survival_prob, where='post', linewidth=2.5, 
-                       label=label, color=color, alpha=0.9)
+            if len(times) == 0:
+                continue
+            
+            # Ensure events array matches times array length
+            if len(events) != len(times):
+                events = (cond_data.loc[cond_data['flow_duration_s'].notna(), 'completed'] == 0).astype(int).values
+            
+            if SCIPY_AVAILABLE and len(times) > 0:
+                try:
+                    # kaplan_meier_estimator expects: event_indicator (True = event occurred), time
+                    event_indicator = events == 1  # True where failure occurred
+                    time, survival_prob = kaplan_meier_estimator(event_indicator, times)
+                    ax.step(time, survival_prob, where='post', linewidth=2.5, 
+                           label=label, color=color, alpha=0.9)
+                except Exception as e:
+                    print(f"Warning: scipy survival analysis failed for {cond}: {e}, using simplified method", flush=True)
+                    # Fall through to simplified method
+                    sorted_indices = np.argsort(times)
+                    sorted_times = times[sorted_indices]
+                    sorted_events = events[sorted_indices]
+                    n = len(times)
+                    survival = np.ones(n)
+                    for i in range(n):
+                        if sorted_events[i] == 1:  # Failure
+                            survival[i:] *= (n - i - 1) / (n - i) if (n - i) > 0 else 0
+                    ax.step(sorted_times, survival, where='post', linewidth=2.5,
+                           label=label, color=color, alpha=0.9)
             else:
                 # Simplified: empirical survival
                 sorted_indices = np.argsort(times)
@@ -511,14 +568,11 @@ def figure_4_extrusion_survival(print_trials_df: pd.DataFrame):
     ax.grid(alpha=0.4, linestyle='--', linewidth=0.8)
     ax.set_axisbelow(True)
     
-    plt.tight_layout()
-    plt.draw()
-    plt.pause(0.1)
-    plt.show(block=True)
-    print("✓ Displayed: Figure 4 — Extrusion Survival Curve", flush=True)
+    display_or_save_figure(fig, 4, "Extrusion Survival Curve", save_mode, output_dir)
 
 
-def figure_5_first_layer_envelope(first_layer_df: pd.DataFrame):
+def figure_5_first_layer_envelope(first_layer_df: pd.DataFrame,
+                                   save_mode: bool = False, output_dir: Optional[Path] = None):
     """
     Figure 5: First-layer operating envelope
     Heatmap showing success/failure regions
@@ -529,8 +583,15 @@ def figure_5_first_layer_envelope(first_layer_df: pd.DataFrame):
     
     fig, ax = plt.subplots(figsize=(4.0, 3.0))
     
-    # Create heatmap from data
-    pivot = first_layer_df.pivot_table(values='success', index='height', columns='speed', aggfunc='mean')
+    # Create heatmap from data - handle different column names
+    if 'h_ratio' in first_layer_df.columns:
+        height_col = 'h_ratio'
+        speed_col = 'speed_mmps'
+    else:
+        height_col = 'height'
+        speed_col = 'speed'
+    
+    pivot = first_layer_df.pivot_table(values='success', index=height_col, columns=speed_col, aggfunc='mean')
     
     im = ax.imshow(pivot.values, cmap='RdYlGn', aspect='auto', vmin=0, vmax=1, interpolation='bilinear')
     
@@ -541,21 +602,18 @@ def figure_5_first_layer_envelope(first_layer_df: pd.DataFrame):
     ax.set_yticklabels([f'{v:.2f}' for v in pivot.index], fontsize=10)
     
     ax.set_xlabel('Speed (mm/s)', fontsize=12, fontweight='bold')
-    ax.set_ylabel('First-Layer Height (mm)', fontsize=12, fontweight='bold')
+    ax.set_ylabel('First-Layer Height Ratio', fontsize=12, fontweight='bold')
     
     # Add colorbar
     cbar = plt.colorbar(im, ax=ax)
     cbar.set_label('Success Rate', fontsize=11, fontweight='bold')
     cbar.ax.tick_params(labelsize=10)
     
-    plt.tight_layout()
-    plt.draw()
-    plt.pause(0.1)
-    plt.show(block=True)
-    print("✓ Displayed: Figure 5 — First-Layer Operating Envelope", flush=True)
+    display_or_save_figure(fig, 5, "First-Layer Operating Envelope", save_mode, output_dir)
 
 
-def figure_6_completion_rate(print_trials_df: pd.DataFrame):
+def figure_6_completion_rate(print_trials_df: pd.DataFrame,
+                              save_mode: bool = False, output_dir: Optional[Path] = None):
     """
     Figure 6: Print completion rate
     Bar chart with Wilson 95% CI error bars
@@ -610,14 +668,11 @@ def figure_6_completion_rate(print_trials_df: pd.DataFrame):
     ax.grid(axis='y', alpha=0.4, linestyle='--', linewidth=0.8)
     ax.set_axisbelow(True)
     
-    plt.tight_layout()
-    plt.draw()
-    plt.pause(0.1)
-    plt.show(block=True)
-    print("✓ Displayed: Figure 6 — Print Completion Rate", flush=True)
+    display_or_save_figure(fig, 6, "Print Completion Rate", save_mode, output_dir)
 
 
-def figure_7_electrical_yield(electrical_df: pd.DataFrame):
+def figure_7_electrical_yield(electrical_df: pd.DataFrame,
+                              save_mode: bool = False, output_dir: Optional[Path] = None):
     """
     Figure 7: Electrical yield (open circuits)
     Bar chart showing open-circuit rates
@@ -664,14 +719,11 @@ def figure_7_electrical_yield(electrical_df: pd.DataFrame):
     ax.grid(axis='y', alpha=0.4, linestyle='--', linewidth=0.8)
     ax.set_axisbelow(True)
     
-    plt.tight_layout()
-    plt.draw()
-    plt.pause(0.1)
-    plt.show(block=True)
-    print("✓ Displayed: Figure 7 — Electrical Yield", flush=True)
+    display_or_save_figure(fig, 7, "Electrical Yield", save_mode, output_dir)
 
 
-def figure_8_resistance_comparison(electrical_df: pd.DataFrame):
+def figure_8_resistance_comparison(electrical_df: pd.DataFrame,
+                                    save_mode: bool = False, output_dir: Optional[Path] = None):
     """
     Figure 8: Resistance baseline vs stabilized
     Side-by-side boxplots with enhanced styling
@@ -696,7 +748,7 @@ def figure_8_resistance_comparison(electrical_df: pd.DataFrame):
     labels = ['Baseline', 'Stabilized']
     colors_list = [COLORS['baseline'], COLORS['stabilized']]
     
-    bp = ax.boxplot(data_to_plot, labels=labels, patch_artist=True,
+    bp = ax.boxplot(data_to_plot, tick_labels=labels, patch_artist=True,
                     widths=0.6, showmeans=True, meanline=False)
     
     # Color the boxes
@@ -724,14 +776,11 @@ def figure_8_resistance_comparison(electrical_df: pd.DataFrame):
     ax.grid(axis='y', alpha=0.4, linestyle='--', linewidth=0.8)
     ax.set_axisbelow(True)
     
-    plt.tight_layout()
-    plt.draw()
-    plt.pause(0.1)
-    plt.show(block=True)
-    print("✓ Displayed: Figure 8 — Resistance Comparison", flush=True)
+    display_or_save_figure(fig, 8, "Resistance Comparison", save_mode, output_dir)
 
 
-def figure_9_3d_toolpath_comparison(baseline_lines: List[str], stabilized_lines: List[str]):
+def figure_9_3d_toolpath_comparison(baseline_lines: List[str], stabilized_lines: List[str],
+                                    save_mode: bool = False, output_dir: Optional[Path] = None):
     """
     Figure 9: 3D toolpath comparison
     Side-by-side 3D visualization with retractions highlighted
@@ -796,10 +845,7 @@ def figure_9_3d_toolpath_comparison(baseline_lines: List[str], stabilized_lines:
     
     plt.tight_layout()
     plt.subplots_adjust(bottom=0.15)
-    plt.draw()
-    plt.pause(0.1)
-    plt.show(block=True)
-    print("✓ Displayed: Figure 9 — 3D Toolpath Comparison", flush=True)
+    display_or_save_figure(fig, 9, "3D Toolpath Comparison", save_mode, output_dir)
 
 
 # ============================================================================
@@ -817,6 +863,10 @@ def main():
     parser.add_argument('--figures', type=str, nargs='+', default=['all'],
                       choices=['1', '2', '3', '4', '5', '6', '7', '8', '9', 'all'],
                       help='Which figures to generate (default: all)')
+    parser.add_argument('--save', action='store_true',
+                      help='Save figures to files instead of displaying interactively')
+    parser.add_argument('--output-dir', type=str, default=None,
+                      help='Directory to save figures (default: results/figures/paper_figs)')
     parser.add_argument('--alpha', type=float, default=8.0,
                       help='Pressure model parameter α (default: 8.0)')
     parser.add_argument('--tau-r', type=float, default=6.0,
@@ -899,52 +949,73 @@ def main():
     else:
         figures_to_generate = args.figures
     
+    # Set up output directory
+    if args.output_dir:
+        output_dir = Path(args.output_dir)
+    else:
+        output_dir = script_dir / 'results' / 'figures' / 'paper_figs'
+    
+    save_mode = args.save
+    
+    # Use non-interactive backend if saving
+    if save_mode:
+        matplotlib.use('Agg')  # Non-interactive backend for saving
+        print("Using non-interactive backend for saving figures...", flush=True)
+    
     print(f"\n{'='*60}", flush=True)
     print(f"Generating Final Paper Figures: {', '.join(figures_to_generate)}", flush=True)
     print(f"{'='*60}", flush=True)
-    print("Figures will be displayed interactively - save them manually using figure window controls.", flush=True)
-    print("NOTE: Figure windows will open one at a time. Close each window to proceed to the next.\n", flush=True)
+    if save_mode:
+        print(f"Figures will be saved to: {output_dir}", flush=True)
+    else:
+        print("Figures will be displayed interactively - save them manually using figure window controls.", flush=True)
+        print("NOTE: Figure windows will open one at a time. Close each window to proceed to the next.", flush=True)
+    print("", flush=True)
     
     # Generate requested figures
     if '1' in figures_to_generate:
         print("\n[1/9] Generating Figure 1 — G-code Modification Summary...", flush=True)
-        figure_1_gcode_modification_summary(baseline_lines, stabilized_lines)
+        figure_1_gcode_modification_summary(baseline_lines, stabilized_lines, save_mode, output_dir)
     
     if '2' in figures_to_generate:
         print("\n[2/9] Generating Figure 2 — Extrusion-Rate Proxy Comparison...", flush=True)
-        figure_2_extrusion_rate_comparison(baseline_lines, stabilized_lines)
+        figure_2_extrusion_rate_comparison(baseline_lines, stabilized_lines, save_mode, output_dir)
     
     if '3' in figures_to_generate:
         print("\n[3/9] Generating Figure 3 — Pressure Estimate Comparison...", flush=True)
         figure_3_pressure_comparison(baseline_lines, stabilized_lines,
-                                     args.alpha, args.tau_r, args.p_y, args.p_max)
+                                     args.alpha, args.tau_r, args.p_y, args.p_max,
+                                     save_mode, output_dir)
     
     if '4' in figures_to_generate:
         print("\n[4/9] Generating Figure 4 — Extrusion Survival Curve...", flush=True)
-        figure_4_extrusion_survival(print_trials_df)
+        figure_4_extrusion_survival(print_trials_df, save_mode, output_dir)
     
     if '5' in figures_to_generate:
         print("\n[5/9] Generating Figure 5 — First-Layer Operating Envelope...", flush=True)
-        figure_5_first_layer_envelope(first_layer_df)
+        figure_5_first_layer_envelope(first_layer_df, save_mode, output_dir)
     
     if '6' in figures_to_generate:
         print("\n[6/9] Generating Figure 6 — Print Completion Rate...", flush=True)
-        figure_6_completion_rate(print_trials_df)
+        figure_6_completion_rate(print_trials_df, save_mode, output_dir)
     
     if '7' in figures_to_generate:
         print("\n[7/9] Generating Figure 7 — Electrical Yield...", flush=True)
-        figure_7_electrical_yield(electrical_df)
+        figure_7_electrical_yield(electrical_df, save_mode, output_dir)
     
     if '8' in figures_to_generate:
         print("\n[8/9] Generating Figure 8 — Resistance Comparison...", flush=True)
-        figure_8_resistance_comparison(electrical_df)
+        figure_8_resistance_comparison(electrical_df, save_mode, output_dir)
     
     if '9' in figures_to_generate:
         print("\n[9/9] Generating Figure 9 — 3D Toolpath Comparison...", flush=True)
-        figure_9_3d_toolpath_comparison(baseline_lines, stabilized_lines)
+        figure_9_3d_toolpath_comparison(baseline_lines, stabilized_lines, save_mode, output_dir)
     
     print(f"\n{'='*60}", flush=True)
-    print("✓ All requested figures displayed successfully!", flush=True)
+    if save_mode:
+        print(f"✓ All requested figures saved to {output_dir}!", flush=True)
+    else:
+        print("✓ All requested figures displayed successfully!", flush=True)
     print(f"{'='*60}\n", flush=True)
 
 

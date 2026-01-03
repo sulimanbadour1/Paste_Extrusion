@@ -61,9 +61,17 @@ def strip_comment(line: str) -> Tuple[str, str]:
 def is_move(code: str) -> bool:
     return bool(MOVE_RE.match(code.strip()))
 
-def is_retraction_move(code: str) -> bool:
+def is_retraction_move(code: str, e_delta: Optional[float] = None) -> bool:
+    """
+    Detect retraction move.
+    For relative mode: E < 0
+    For absolute mode: e_delta < 0 (E decreased)
+    """
     if not is_move(code):
         return False
+    if e_delta is not None:
+        return e_delta < -1e-6
+    # Fallback: check if E token is negative (relative mode only)
     e = parse_float_token(code, "E")
     return (e is not None) and (e < 0.0)
 
@@ -138,13 +146,14 @@ class KinematicState:
     y: Optional[float] = None
     z: Optional[float] = None
     f: Optional[float] = None  # mm/min last feed
+    e_abs_prev: float = 0.0  # Previous absolute E value (for absolute mode conversion)
 
 @dataclasses.dataclass
 class PressureState:
     p_hat: float = 0.0
     u_prev: float = 0.0
 
-def emit_header_block(cfg: StabilizerConfig) -> List[str]:
+def emit_header_block(cfg: StabilizerConfig, reset_e: bool = True) -> List[str]:
     out: List[str] = []
     out.append("; ===== Paste Stabilization Layer (v2, auto-generated) =====")
     out.append("; Method: priming ramp + purge line + pressure-state shaping + retraction suppression")
@@ -153,6 +162,8 @@ def emit_header_block(cfg: StabilizerConfig) -> List[str]:
         out.append("G90 ; absolute positioning (XY)")
     if cfg.enforce_relative_extrusion:
         out.append("M83 ; relative extrusion (E)")
+        if reset_e:
+            out.append("G92 E0 ; reset E to 0 for relative mode")
     out.append(f"G1 Z{cfg.purge_z:.3f} F600 ; set purge Z")
     out.append(f"G1 X{cfg.purge_x0:.3f} Y{cfg.purge_y0:.3f} F3000 ; purge start")
     out.append("; --- Pressure priming ramp (open-loop) ---")
@@ -170,6 +181,7 @@ def emit_retraction_replacement(cfg: StabilizerConfig, original_line: str,
                                  z: Optional[float] = None, f: Optional[float] = None) -> List[str]:
     """
     Replace retraction with dwell + micro-prime, preserving any XY/Z movement.
+    IMPORTANT: Split travel and prime to avoid extruding during travel (unsafe for paste).
     """
     out: List[str] = []
     out.append(f"; [stabilizer] RETRACTION SUPPRESSED: {original_line.strip()}")
@@ -180,29 +192,27 @@ def emit_retraction_replacement(cfg: StabilizerConfig, original_line: str,
     if cfg.retract_dwell_s > 0:
         out.append(f"G4 S{cfg.retract_dwell_s:.2f} ; dwell instead of retract")
     
-    # Build the micro-prime move, preserving geometry
-    micro_prime_parts = ["G1"]
-    if x is not None:
-        micro_prime_parts.append(f"X{x:.3f}")
-    if y is not None:
-        micro_prime_parts.append(f"Y{y:.3f}")
-    if z is not None:
-        micro_prime_parts.append(f"Z{z:.3f}")
-    if cfg.micro_prime_e > 0:
-        micro_prime_parts.append(f"E{cfg.micro_prime_e:.3f}")
-    if f is not None:
-        micro_prime_parts.append(f"F{f:.1f}")
-    elif cfg.micro_prime_feed > 0:
-        micro_prime_parts.append(f"F{cfg.micro_prime_feed:.1f}")
-    
-    if len(micro_prime_parts) > 1:  # More than just "G1"
-        comment = "micro-prime after dwell"
-        if has_xy_movement:
-            comment += " (geometry preserved)"
-        out.append(" ".join(micro_prime_parts) + f" ; {comment}")
-    elif cfg.micro_prime_e > 0:
-        # Pure E move if no geometry
-        out.append(f"G1 E{cfg.micro_prime_e:.3f} F{cfg.micro_prime_feed:.1f} ; micro-prime after dwell")
+    # C1 FIX: Split travel and prime to avoid extruding during travel
+    if has_xy_movement:
+        # First: travel move with XY/Z only (no E)
+        travel_parts = ["G1"]
+        if x is not None:
+            travel_parts.append(f"X{x:.3f}")
+        if y is not None:
+            travel_parts.append(f"Y{y:.3f}")
+        if z is not None:
+            travel_parts.append(f"Z{z:.3f}")
+        if f is not None:
+            travel_parts.append(f"F{f:.1f}")
+        out.append(" ".join(travel_parts) + " ; travel (no extrusion)")
+        
+        # Then: micro-prime as pure E move
+        if cfg.micro_prime_e > 0:
+            out.append(f"G1 E{cfg.micro_prime_e:.3f} F{cfg.micro_prime_feed:.1f} ; micro-prime after travel")
+    else:
+        # No geometry: just dwell + pure E prime
+        if cfg.micro_prime_e > 0:
+            out.append(f"G1 E{cfg.micro_prime_e:.3f} F{cfg.micro_prime_feed:.1f} ; micro-prime after dwell")
     
     return out
 
@@ -225,7 +235,13 @@ class PasteStabilizerV2:
         self.p = PressureState()
         self.inserted_header = False
         self.seen_first_motion = False
+        self.seen_g28 = False  # Track if we've seen homing
+        self.seen_g92_e0 = False  # Track if we've seen G92 E0
         self.changes: List[str] = []
+
+        # Extrusion mode tracking
+        self.extrusion_mode: str = "REL"  # "REL" or "ABS" - default to relative
+        self.input_was_absolute: bool = False  # Track if input file was absolute
 
         # CSV log rows: list of dicts
         self.log_rows: List[Dict[str, object]] = []
@@ -249,12 +265,33 @@ class PasteStabilizerV2:
         })
 
     def _maybe_insert_header(self, out: List[str], code: str) -> None:
+        """
+        D3 FIX: Insert header at better location - after G28, G92 E0, or first-layer Z.
+        """
         if self.inserted_header:
             return
-        if is_move(code):
-            self.seen_first_motion = True
-        if self.seen_first_motion:
-            header_lines = emit_header_block(self.cfg)
+        
+        # Check for homing (G28)
+        if code.strip().upper().startswith("G28"):
+            self.seen_g28 = True
+        
+        # Check for G92 E0
+        if "G92" in code.upper() and parse_float_token(code, "E") is not None:
+            e_val = parse_float_token(code, "E")
+            if abs(e_val) < 1e-6:  # G92 E0 or G92 E0.0
+                self.seen_g92_e0 = True
+        
+        # Check for first-layer Z height (heuristic: Z < 1.0mm likely first layer)
+        z_val = parse_float_token(code, "Z")
+        first_layer_z = (z_val is not None and 0.1 <= z_val <= 1.0)
+        
+        # Insert header after homing, G92 E0, or first-layer Z, but before actual deposition
+        should_insert = (self.seen_g28 or self.seen_g92_e0 or first_layer_z) and not self.inserted_header
+        
+        if should_insert:
+            # Reset E if we're converting from absolute to relative
+            reset_e = self.input_was_absolute and self.cfg.enforce_relative_extrusion
+            header_lines = emit_header_block(self.cfg, reset_e=reset_e)
             out.extend(header_lines)
             self.inserted_header = True
             self.changes.append("Inserted stabilization header (priming ramp + purge line).")
@@ -330,24 +367,30 @@ class PasteStabilizerV2:
                                e: float, f_token: Optional[float]) -> Tuple[List[str], str]:
         """
         For an extrusion move, shape u and adjust feed rate accordingly.
+        B1 FIX: Update estimator in same order as emitted commands (pre-actions first, then move).
+        B2 FIX: Recompute dt with F_new after feed scaling.
+        E2 FIX: Pre-check pressure before applying shaping.
         Returns (output_lines, action_label).
         """
         out_lines: List[str] = []
 
-        dt = self._estimate_dt(code, x, y, e, f_token)
-        u_raw = self._compute_u_raw(e, dt)
-        u_shaped = self._rate_limit(u_raw)
+        # Initial dt estimate (will be recomputed after feed scaling)
+        dt_initial = self._estimate_dt(code, x, y, e, f_token)
+        u_raw_initial = self._compute_u_raw(e, dt_initial)
+        
+        # E2 FIX: Pre-check pressure with candidate u to decide interventions
+        # Predict next pressure with candidate u (before rate limiting)
+        u_candidate = self._rate_limit(u_raw_initial)
+        # Simple prediction: p_next ≈ p_hat + dt * (alpha*u - p_hat/tau_r)
+        p_predicted = self.p.p_hat + dt_initial * (self.cfg.alpha * u_candidate - self.p.p_hat / self.cfg.tau_r)
+        p_predicted = max(0.0, p_predicted)
 
-        # Update pressure estimate using shaped u (not raw)
-        self._pressure_update(u_shaped, dt)
-
-        # Decide interventions based on pressure window
+        # Decide interventions based on predicted pressure (pre-check)
         action = "emit"
 
-        # 1) Too high pressure: dwell (relax), optionally reduce u next
-        if self.p.p_hat > (self.cfg.p_max - self.cfg.relax_trigger_margin):
+        # 1) Too high pressure: dwell (relax) BEFORE the move
+        if p_predicted > (self.cfg.p_max - self.cfg.relax_trigger_margin) or self.p.p_hat > (self.cfg.p_max - self.cfg.relax_trigger_margin):
             action = "relax_dwell"
-            p_before = self.p.p_hat
             out_lines.append(f"; [stabilizer] p_hat={self.p.p_hat:.2f} near/over p_max, relaxing")
             out_lines.append(f"G4 S{self.cfg.relax_dwell_s:.2f} ; relax pressure")
 
@@ -357,7 +400,7 @@ class PasteStabilizerV2:
                      e=None, dt=self.cfg.relax_dwell_s,
                      u_raw=None, u_shaped=None, feed_scale=None)
 
-            # Let estimator relax during dwell: u=0, dt=dwell
+            # B1 FIX: Update estimator for dwell FIRST (before move)
             self._pressure_update(0.0, self.cfg.relax_dwell_s)
             self.t_sim += self.cfg.relax_dwell_s
 
@@ -365,7 +408,6 @@ class PasteStabilizerV2:
         lowprime_count = 0
         while self.p.p_hat < self.cfg.p_y and lowprime_count < self.cfg.lowprime_steps_max:
             action = "low_prime"
-            p_before = self.p.p_hat
             out_lines.append(f"; [stabilizer] p_hat={self.p.p_hat:.2f} below p_y, priming")
             prime_line = f"G1 E{self.cfg.lowprime_e:.3f} F{self.cfg.lowprime_feed:.1f}"
             out_lines.append(f"{prime_line} ; low-prime")
@@ -382,27 +424,32 @@ class PasteStabilizerV2:
                      u_raw=self.cfg.u_scale * (self.cfg.lowprime_e / dtp),
                      u_shaped=u_p, feed_scale=None)
             
+            # B1 FIX: Update estimator for prime FIRST (before move)
             self._pressure_update(u_p, dtp)
             self.p.u_prev = u_p  # Update u_prev for rate limiting continuity
             self.t_sim += dtp
             lowprime_count += 1
 
+        # Now compute shaping for the actual move
+        u_shaped = self._rate_limit(u_raw_initial)
+
         # Feed scaling:
         # Keep E fixed (geometry integrity) but adjust feed to match u_shaped vs u_raw.
-        # If u_shaped < u_raw (rate limited), reduce feed rate to match the reduced extrusion rate.
-        # Formula: F_new = F_old * (u_shaped/u_raw) to maintain consistent effective extrusion rate.
         feed = f_token if f_token is not None else (self.k.f if self.k.f is not None else 600.0)
         feed_scale = 1.0
-        if abs(u_raw) > 1e-6:
+        if abs(u_raw_initial) > 1e-6:
             # Scale feed rate proportionally to match shaped extrusion rate
-            feed_scale = clamp(u_shaped / u_raw, self.cfg.feed_scale_min, self.cfg.feed_scale_max)
-        elif abs(u_shaped) > 1e-6:
-            # If u_raw is zero but u_shaped isn't (shouldn't happen), don't scale
-            feed_scale = 1.0
+            feed_scale = clamp(u_shaped / u_raw_initial, self.cfg.feed_scale_min, self.cfg.feed_scale_max)
         f_new = feed * feed_scale
 
+        # B2 FIX: Recompute dt using F_new (not F_old)
+        # Recompute dt with new feed rate
+        dt_new = self._estimate_dt(code, x, y, e, f_new)
+        # Recompute u_raw with new dt
+        u_raw = self._compute_u_raw(e, dt_new)
+        u_shaped = self._rate_limit(u_raw)
+
         # Rewrite the line: set F to f_new (keep XY and E the same)
-        # If line already has F, replace; else append.
         if re.search(r"\bF[-+]?\d*\.?\d+", code, flags=re.IGNORECASE):
             code_out = re.sub(r"\bF([-+]?\d*\.?\d+)", f"F{f_new:.1f}", code, flags=re.IGNORECASE)
         else:
@@ -410,9 +457,10 @@ class PasteStabilizerV2:
 
         out_lines.append(code_out)
 
-        # Update prev u and simulated time
+        # B1 FIX: Update estimator for the move AFTER pre-actions
+        self._pressure_update(u_shaped, dt_new)
         self.p.u_prev = u_shaped
-        self.t_sim += dt
+        self.t_sim += dt_new
 
         # Update kinematic memory (for next length)
         if x is not None:
@@ -422,9 +470,9 @@ class PasteStabilizerV2:
         if f_new is not None:
             self.k.f = f_new
 
-        # Logging (log only the final emitted move; priming/dwell are logged via separate calls in transform)
+        # Logging (log only the final emitted move; priming/dwell are logged separately)
         self._log(action=action, line_in=code, line_out=code_out,
-                  e=e, dt=dt, u_raw=u_raw, u_shaped=u_shaped, feed_scale=feed_scale)
+                  e=e, dt=dt_new, u_raw=u_raw, u_shaped=u_shaped, feed_scale=feed_scale)
 
         return out_lines, action
 
@@ -443,60 +491,129 @@ class PasteStabilizerV2:
                 out.append(raw.rstrip("\n"))
                 continue
 
-            # Insert header early
+            # D2 FIX: Track M82/M83 in input stream
+            if code_stripped.upper().startswith("M82"):
+                self.extrusion_mode = "ABS"
+                self.input_was_absolute = True
+                # If we're enforcing relative, we'll convert later; for now just track
+                if not self.cfg.enforce_relative_extrusion:
+                    out.append(raw.rstrip("\n"))
+                else:
+                    # Remove M82, we'll insert M83 in header
+                    out.append(f"; [stabilizer] Removed M82 (converting to relative mode)")
+                continue
+            elif code_stripped.upper().startswith("M83"):
+                self.extrusion_mode = "REL"
+                if self.cfg.enforce_relative_extrusion:
+                    out.append(raw.rstrip("\n"))
+                else:
+                    out.append(raw.rstrip("\n"))
+                continue
+
+            # D1 FIX: Handle G92 E0 and extrusion resets
+            if code_stripped.upper().startswith("G92"):
+                e_val = parse_float_token(code_stripped, "E")
+                if e_val is not None:
+                    # Reset E tracking
+                    self.k.e_abs_prev = e_val
+                    self.seen_g92_e0 = True
+                    # If converting to relative, emit G92 E0 after header
+                    if self.cfg.enforce_relative_extrusion and self.input_was_absolute:
+                        # We'll handle this in header insertion
+                        out.append(f"; [stabilizer] G92 E{e_val:.3f} - will reset to E0 in relative mode")
+                    else:
+                        out.append(raw.rstrip("\n"))
+                    continue
+
+            # Insert header early (D3 FIX: better insertion point)
             self._maybe_insert_header(out, code_stripped)
 
-            # Retraction suppression
-            if self.cfg.disable_retractions and is_retraction_move(code_stripped):
-                # Extract XY/Z/F from the retraction move to preserve geometry
-                x = parse_float_token(code_stripped, "X")
-                y = parse_float_token(code_stripped, "Y")
-                z = parse_float_token(code_stripped, "Z")
-                f = parse_float_token(code_stripped, "F")
-                e_retract = parse_float_token(code_stripped, "E")
-                
-                # Update kinematic state if XY/Z present (for next moves)
-                if x is not None:
-                    self.k.x = x
-                if y is not None:
-                    self.k.y = y
-                if z is not None:
-                    self.k.z = z
-                if f is not None:
-                    self.k.f = f
-                
-                # Replace retraction, preserving geometry
-                repl = emit_retraction_replacement(self.cfg, raw, x, y, z, f)
-                out.extend(repl)
-                self.changes.append(f"Suppressed retraction at line {idx+1} (geometry preserved).")
-                
-                # Log the replacement as an event with dt ~ dwell
-                self._log(action="retract_suppressed",
-                          line_in=raw, line_out=" | ".join(repl),
-                          e=e_retract,
-                          dt=self.cfg.retract_dwell_s,
-                          u_raw=None, u_shaped=None, feed_scale=None)
-                # simulate dwell relaxation in estimator:
-                self._pressure_update(0.0, self.cfg.retract_dwell_s)
-                self.t_sim += self.cfg.retract_dwell_s
-                continue
+            # A2 FIX: Convert absolute E to relative delta if needed
+            def convert_e_absolute_to_relative(e_abs: float) -> float:
+                """Convert absolute E to relative delta."""
+                if self.extrusion_mode == "ABS":
+                    e_delta = e_abs - self.k.e_abs_prev
+                    self.k.e_abs_prev = e_abs
+                    return e_delta
+                else:
+                    # Already relative
+                    return e_abs
+
+            # Retraction suppression (A3 FIX: detect retraction correctly for absolute mode)
+            if is_move(code_stripped):
+                e_token = parse_float_token(code_stripped, "E")
+                if e_token is not None:
+                    # Compute E delta for retraction detection
+                    if self.extrusion_mode == "ABS":
+                        e_delta = e_token - self.k.e_abs_prev
+                    else:
+                        e_delta = e_token
+                    
+                    # A3 FIX: Detect retraction by delta (works for both ABS and REL)
+                    if self.cfg.disable_retractions and is_retraction_move(code_stripped, e_delta):
+                        # Extract XY/Z/F from the retraction move to preserve geometry
+                        x = parse_float_token(code_stripped, "X")
+                        y = parse_float_token(code_stripped, "Y")
+                        z = parse_float_token(code_stripped, "Z")
+                        f = parse_float_token(code_stripped, "F")
+                        
+                        # Update kinematic state if XY/Z present (for next moves)
+                        if x is not None:
+                            self.k.x = x
+                        if y is not None:
+                            self.k.y = y
+                        if z is not None:
+                            self.k.z = z
+                        if f is not None:
+                            self.k.f = f
+                        
+                        # Update E tracking for absolute mode
+                        if self.extrusion_mode == "ABS":
+                            self.k.e_abs_prev = e_token
+                        
+                        # Replace retraction, preserving geometry
+                        repl = emit_retraction_replacement(self.cfg, raw, x, y, z, f)
+                        out.extend(repl)
+                        self.changes.append(f"Suppressed retraction at line {idx+1} (geometry preserved).")
+                        
+                        # Log the replacement as an event with dt ~ dwell
+                        self._log(action="retract_suppressed",
+                                  line_in=raw, line_out=" | ".join(repl),
+                                  e=e_delta,
+                                  dt=self.cfg.retract_dwell_s,
+                                  u_raw=None, u_shaped=None, feed_scale=None)
+                        # simulate dwell relaxation in estimator:
+                        self._pressure_update(0.0, self.cfg.retract_dwell_s)
+                        self.t_sim += self.cfg.retract_dwell_s
+                        continue
 
             # For moves with extrusion, apply shaping
             if is_move(code_stripped) and has_extrusion(code_stripped):
                 x = parse_float_token(code_stripped, "X")
                 y = parse_float_token(code_stripped, "Y")
-                e = parse_float_token(code_stripped, "E")
+                e_token = parse_float_token(code_stripped, "E")
                 f = parse_float_token(code_stripped, "F")
 
                 # If E is None, pass through (should not happen here)
-                if e is None:
+                if e_token is None:
                     out.append(raw.rstrip("\n"))
                     continue
+
+                # A2 FIX: Convert absolute E to relative delta
+                e = convert_e_absolute_to_relative(e_token)
 
                 # If E <= 0: either retraction (handled earlier) or zero; pass through
                 if e <= 0:
                     out.append(raw.rstrip("\n"))
                     continue
+
+                # A2 FIX: Rewrite line with relative E if we converted
+                if self.extrusion_mode == "ABS" and self.cfg.enforce_relative_extrusion:
+                    # Rewrite the line with relative E delta
+                    if re.search(r"\bE[-+]?\d*\.?\d+", code_stripped, flags=re.IGNORECASE):
+                        code_stripped = re.sub(r"\bE([-+]?\d*\.?\d+)", f"E{e:.3f}", code_stripped, flags=re.IGNORECASE)
+                    else:
+                        code_stripped = f"{code_stripped} E{e:.3f}"
 
                 shaped_lines, action = self._apply_shaping_to_move(code_stripped, x, y, e, f)
                 out.extend(shaped_lines)
@@ -568,7 +685,7 @@ def main():
     stab = PasteStabilizerV2(cfg)
 
     try:
-     in_lines = in_path.read_text(encoding="utf-8", errors="replace").splitlines()
+        in_lines = in_path.read_text(encoding="utf-8", errors="replace").splitlines()
     except Exception as e:
         print(f"ERROR: Failed to read input file: {e}", file=sys.stderr)
         sys.exit(1)
@@ -577,7 +694,7 @@ def main():
         print("WARNING: Input file is empty", file=sys.stderr)
     
     try:
-     out_lines = stab.transform(in_lines)
+        out_lines = stab.transform(in_lines)
     except Exception as e:
         print(f"ERROR: Failed to transform G-code: {e}", file=sys.stderr)
         import traceback
