@@ -40,7 +40,10 @@ class StabilizerGUI:
         # Tab 4: Research Plots
         self.create_research_plots_tab()
         
-        # Tab 5: Help
+        # Tab 5: 10 Paper Figures
+        self.create_10_figures_tab()
+        
+        # Tab 6: Help
         self.create_help_tab()
     
     def create_stabilization_tab(self):
@@ -210,41 +213,37 @@ class StabilizerGUI:
         title.pack(pady=10)
         
         desc = ttk.Label(frame, 
-                        text="Generate all figures for your research paper:\n"
-                             "• Print trials analysis\n• Electrical trace results\n• Pressure simulations\n• Statistical analysis",
+                        text="Generate reviewer-proof figures for your research paper.\n"
+                             "Figures are displayed interactively - save them manually using the figure window controls.",
                         justify=tk.CENTER)
         desc.pack(pady=5)
         
         # Plot options
-        options_frame = ttk.LabelFrame(frame, text="Plot Options", padding=10)
+        options_frame = ttk.LabelFrame(frame, text="Figure Sets", padding=10)
         options_frame.pack(fill=tk.X, padx=20, pady=10)
         
         self.plot_basic = tk.BooleanVar(value=True)
         self.plot_advanced = tk.BooleanVar(value=True)
         
-        ttk.Checkbutton(options_frame, text="Basic Research Plots (extrusion metrics, success rates, clogs, pressure simulations, electrical results)", 
+        ttk.Checkbutton(options_frame, text="Figures 1-3: G-code Analysis (G-code delta, command timeline, pressure estimate)", 
                        variable=self.plot_basic).pack(anchor=tk.W, pady=2)
-        ttk.Checkbutton(options_frame, text="Advanced Statistical Analysis (significance tests, effect sizes, correlations, pressure actions)", 
+        ttk.Checkbutton(options_frame, text="Figures 4-7: Experimental Data (survival curve, operability map, clog correlation, electrical yield)", 
                        variable=self.plot_advanced).pack(anchor=tk.W, pady=2)
         
         # Info
-        info_frame = ttk.LabelFrame(frame, text="Information", padding=10)
+        info_frame = ttk.LabelFrame(frame, text="Figure Descriptions", padding=10)
         info_frame.pack(fill=tk.X, padx=20, pady=10)
         
-        info_text = ("Basic Plots:\n"
-                    "• Extrusion onset and flow duration boxplots\n"
-                    "• Success rates (first-layer, completion)\n"
-                    "• Clog frequency analysis\n"
-                    "• Pressure simulation comparisons\n"
-                    "• Electrical trace results\n"
-                    "• Pressure trace from run_log.csv\n\n"
-                    "Advanced Plots:\n"
-                    "• Statistical significance tests (t-tests)\n"
-                    "• Effect sizes (Cohen's d)\n"
-                    "• Metric correlations\n"
-                    "• Pressure actions over time\n"
-                    "• Comprehensive multi-panel summary\n\n"
-                    "All figures are saved to the 'figures/' directory.")
+        info_text = ("Figures 1-3 (G-code Analysis):\n"
+                    "• Figure 1: G-code delta (retractions, dwells, E deltas)\n"
+                    "• Figure 2: Command timeline u(t) before vs after\n"
+                    "• Figure 3: Model-based pressure estimate p̂(t) with bounds\n\n"
+                    "Figures 4-7 (Experimental Data - requires print_trials.csv):\n"
+                    "• Figure 4: Extrusion continuity survival curve\n"
+                    "• Figure 5: First-layer operability map\n"
+                    "• Figure 6: Clog events vs retraction count\n"
+                    "• Figure 7: Conductive trace yield + resistance stability\n\n"
+                    "Note: All figures are displayed on screen. Use figure window controls to save manually.")
         
         ttk.Label(info_frame, text=info_text, justify=tk.LEFT, font=("Courier", 9)).pack(anchor=tk.W)
         
@@ -271,8 +270,77 @@ class StabilizerGUI:
         self.research_log = scrolledtext.ScrolledText(plots_log_frame, height=10, wrap=tk.WORD)
         self.research_log.pack(fill=tk.BOTH, expand=True)
     
+    def create_10_figures_tab(self):
+        """Tab 5: Generate 10 Paper Figures"""
+        frame = ttk.Frame(self.notebook)
+        self.notebook.add(frame, text="5. 10 Paper Figures")
+        
+        title = ttk.Label(frame, text="Generate 10 Paper Figures", 
+                         font=("Arial", 14, "bold"))
+        title.pack(pady=10)
+        
+        desc = ttk.Label(frame, 
+                        text="Generate exactly 10 figures for your research paper.\n"
+                             "Figures are displayed interactively - save them manually using figure window controls.",
+                        justify=tk.CENTER)
+        desc.pack(pady=5)
+        
+        # Figure selection
+        selection_frame = ttk.LabelFrame(frame, text="Select Figures to Generate", padding=10)
+        selection_frame.pack(fill=tk.X, padx=20, pady=10)
+        
+        # Create checkboxes for each figure
+        self.fig_vars = {}
+        fig_descriptions = {
+            '1': 'Fig. 1 — G-code modification summary (delta)',
+            '2': 'Fig. 2 — Retraction suppression histogram',
+            '3': 'Fig. 3 — Extrusion-rate proxy timeline u(t) (baseline)',
+            '4': 'Fig. 4 — Extrusion-rate proxy timeline u(t) (stabilized)',
+            '5': 'Fig. 5 — Pressure estimate p̂(t) with bounds (baseline)',
+            '6': 'Fig. 6 — Pressure estimate p̂(t) with bounds (stabilized)',
+            '7': 'Fig. 7 — Extrusion continuity survival curve',
+            '8': 'Fig. 8 — First-layer operating envelope heatmap',
+            '9': 'Fig. 9 — Electrical yield (open-circuit rate)',
+            '10': 'Fig. 10 — Resistance stability (boxplot)'
+        }
+        
+        # Two columns of checkboxes
+        checkbox_frame = ttk.Frame(selection_frame)
+        checkbox_frame.pack(fill=tk.X)
+        
+        col1_frame = ttk.Frame(checkbox_frame)
+        col1_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=5)
+        col2_frame = ttk.Frame(checkbox_frame)
+        col2_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=5)
+        
+        for i, (fig_num, desc) in enumerate(fig_descriptions.items()):
+            var = tk.BooleanVar(value=True)
+            self.fig_vars[fig_num] = var
+            parent = col1_frame if int(fig_num) <= 5 else col2_frame
+            ttk.Checkbutton(parent, text=f"{desc}", variable=var).pack(anchor=tk.W, pady=2)
+        
+        # Select all / Deselect all buttons
+        select_buttons_frame = ttk.Frame(selection_frame)
+        select_buttons_frame.pack(pady=5)
+        ttk.Button(select_buttons_frame, text="Select All", 
+                  command=lambda: [v.set(True) for v in self.fig_vars.values()]).pack(side=tk.LEFT, padx=5)
+        ttk.Button(select_buttons_frame, text="Deselect All", 
+                  command=lambda: [v.set(False) for v in self.fig_vars.values()]).pack(side=tk.LEFT, padx=5)
+        
+        # Generate button
+        generate_btn = ttk.Button(frame, text="Generate Selected Figures", 
+                                 command=self.run_10_figures, style="Accent.TButton")
+        generate_btn.pack(pady=20)
+        
+        # Output log
+        log_frame = ttk.LabelFrame(frame, text="Output", padding=10)
+        log_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=10)
+        
+        self.figures_10_log = scrolledtext.ScrolledText(log_frame, height=10, wrap=tk.WORD)
+        self.figures_10_log.pack(fill=tk.BOTH, expand=True)
+    
     def create_help_tab(self):
-        """Tab 5: Help and Documentation"""
+        """Tab 6: Help and Documentation"""
         frame = ttk.Frame(self.notebook)
         self.notebook.add(frame, text="Help")
         
@@ -411,7 +479,7 @@ For more information, see readme.md
             if self.viz_3d.get():
                 self.visualization_log.insert(tk.END, "Creating 3D comparison...\n")
                 cmd = [
-                    sys.executable, "visualize_3d_comparison.py",
+                    sys.executable, "verify_stabilizer.py",  # Plotting removed - use verification instead
                     "--original", self.viz_original.get(),
                     "--stabilized", self.viz_stabilized.get(),
                     "--output", self.viz_output.get()
@@ -423,7 +491,7 @@ For more information, see readme.md
             if self.viz_comparison.get():
                 self.visualization_log.insert(tk.END, "Creating detailed comparison...\n")
                 cmd = [
-                    sys.executable, "compare_gcode.py",
+                    sys.executable, "verify_stabilizer.py",  # Plotting removed - use verification instead
                     self.viz_original.get(), self.viz_stabilized.get()
                 ]
                 result = subprocess.run(cmd, capture_output=True, text=True, cwd=Path(__file__).parent)
@@ -443,13 +511,52 @@ For more information, see readme.md
             messagebox.showerror("Error", f"Failed to generate visualizations: {str(e)}")
     
     def run_research_plots(self):
-        """Run basic research plots script."""
+        """Run paper figures script (Figures 1-3: G-code analysis)."""
         self.research_log.delete(1.0, tk.END)
-        self.research_log.insert(tk.END, "Generating basic research plots...\n\n")
+        self.research_log.insert(tk.END, "Generating paper figures (Figures 1-3)...\n\n")
         self.root.update()
         
         try:
-            cmd = [sys.executable, "generate_research_plots.py"]
+            # Get file paths from GUI
+            baseline_gcode = self.verify_input.get() or self.viz_original.get() or "test.gcode"
+            stabilized_gcode = self.verify_output.get() or self.viz_stabilized.get() or "results/stabilized.gcode"
+            stabilized_csv = self.verify_csv.get() or self.csv_file.get() or "results/run_log.csv"
+            
+            # Resolve paths relative to code directory
+            code_dir = Path(__file__).parent
+            baseline_path = code_dir / baseline_gcode
+            if not baseline_path.exists() and baseline_gcode == "test.gcode":
+                # Try alternative location
+                baseline_path = code_dir / "test_gcode" / "test.gcode"
+            stabilized_path = code_dir / stabilized_gcode
+            
+            if not baseline_path.exists():
+                self.research_log.insert(tk.END, f"ERROR: Baseline G-code not found: {baseline_gcode}\n")
+                messagebox.showerror("Error", f"Baseline G-code not found: {baseline_gcode}")
+                return
+            
+            if not stabilized_path.exists():
+                self.research_log.insert(tk.END, f"ERROR: Stabilized G-code not found: {stabilized_gcode}\n")
+                messagebox.showerror("Error", f"Stabilized G-code not found: {stabilized_gcode}")
+                return
+            
+            # Build command - only include CSV if file exists
+            cmd = [
+                sys.executable, "generate_paper_figures.py",
+                "--baseline-gcode", str(baseline_path),
+                "--stabilized-gcode", str(stabilized_path),
+            ]
+            
+            # Add CSV argument only if file exists
+            stabilized_csv_path = code_dir / stabilized_csv
+            if stabilized_csv_path.exists():
+                cmd.extend(["--stabilized-csv", str(stabilized_csv_path)])
+            
+            cmd.extend(["--figures", "1", "2", "3"])
+            
+            self.research_log.insert(tk.END, f"Running: {' '.join(cmd)}\n\n")
+            self.root.update()
+            
             result = subprocess.run(cmd, capture_output=True, text=True, 
                                   cwd=Path(__file__).parent)
             
@@ -458,30 +565,53 @@ For more information, see readme.md
                 self.research_log.insert(tk.END, "\n\nSTDERR:\n" + result.stderr)
             
             if result.returncode == 0:
-                messagebox.showinfo("Success", "Basic research plots generated successfully!")
+                messagebox.showinfo("Success", 
+                                  "Paper figures (1-3) displayed!\n\n"
+                                  "Use the figure window controls to save them manually.")
             else:
-                messagebox.showwarning("Warning", "Some plots may have failed. Check the log.")
+                messagebox.showwarning("Warning", "Some figures may have failed. Check the log.")
         
         except Exception as e:
             self.research_log.insert(tk.END, f"\n\nERROR: {str(e)}")
-            messagebox.showerror("Error", f"Failed to generate research plots: {str(e)}")
+            messagebox.showerror("Error", f"Failed to generate figures: {str(e)}")
     
     def run_advanced_plots(self):
-        """Run advanced research plots script."""
+        """Run paper figures script (Figures 4-7: Experimental data analysis)."""
         self.research_log.delete(1.0, tk.END)
-        self.research_log.insert(tk.END, "Generating advanced research plots...\n\n")
+        self.research_log.insert(tk.END, "Generating paper figures (Figures 4-7)...\n\n")
         self.root.update()
         
         try:
-            # Check if scipy is available
-            import importlib
-            scipy_available = importlib.util.find_spec("scipy") is not None
-            if not scipy_available:
-                self.research_log.insert(tk.END, "⚠ Note: scipy not installed. Using simplified statistical tests.\n")
-                self.research_log.insert(tk.END, "   Install with: pip install scipy (for more accurate tests)\n\n")
-                self.root.update()
+            # Get file paths from GUI
+            baseline_gcode = self.verify_input.get() or self.viz_original.get() or "test.gcode"
+            stabilized_gcode = self.verify_output.get() or self.viz_stabilized.get() or "results/stabilized.gcode"
             
-            cmd = [sys.executable, "generate_advanced_plots.py"]
+            # Resolve paths relative to code directory
+            code_dir = Path(__file__).parent
+            baseline_path = code_dir / baseline_gcode
+            if not baseline_path.exists() and baseline_gcode == "test.gcode":
+                baseline_path = code_dir / "test_gcode" / "test.gcode"
+            stabilized_path = code_dir / stabilized_gcode
+            print_trials = Path(__file__).parent.parent / "print_trials.csv"
+            
+            if not print_trials.exists():
+                self.research_log.insert(tk.END, f"ERROR: print_trials.csv not found at {print_trials}\n")
+                self.research_log.insert(tk.END, "Figures 4-7 require experimental data from print_trials.csv\n")
+                messagebox.showerror("Error", f"print_trials.csv not found at {print_trials}\n\n"
+                                            "Figures 4-7 require experimental data.")
+                return
+            
+            cmd = [
+                sys.executable, "generate_paper_figures.py",
+                "--baseline-gcode", str(baseline_path),
+                "--stabilized-gcode", str(stabilized_path),
+                "--print-trials", str(print_trials),
+                "--figures", "4", "5", "6", "7"
+            ]
+            
+            self.research_log.insert(tk.END, f"Running: {' '.join(cmd)}\n\n")
+            self.root.update()
+            
             result = subprocess.run(cmd, capture_output=True, text=True, 
                                   cwd=Path(__file__).parent)
             
@@ -490,13 +620,15 @@ For more information, see readme.md
                 self.research_log.insert(tk.END, "\n\nSTDERR:\n" + result.stderr)
             
             if result.returncode == 0:
-                messagebox.showinfo("Success", "Advanced research plots generated successfully!")
+                messagebox.showinfo("Success", 
+                                  "Paper figures (4-7) displayed!\n\n"
+                                  "Use the figure window controls to save them manually.")
             else:
-                messagebox.showwarning("Warning", "Some plots may have failed. Check the log.")
+                messagebox.showwarning("Warning", "Some figures may have failed. Check the log.")
         
         except Exception as e:
             self.research_log.insert(tk.END, f"\n\nERROR: {str(e)}")
-            messagebox.showerror("Error", f"Failed to generate advanced plots: {str(e)}")
+            messagebox.showerror("Error", f"Failed to generate figures: {str(e)}")
     
     def run_all_research_plots(self):
         """Run all selected research plots."""
@@ -507,39 +639,84 @@ For more information, see readme.md
         results = []
         errors = []
         
+        # Get file paths from GUI
+        baseline_gcode = self.verify_input.get() or self.viz_original.get() or "test.gcode"
+        stabilized_gcode = self.verify_output.get() or self.viz_stabilized.get() or "results/stabilized.gcode"
+        stabilized_csv = self.verify_csv.get() or self.csv_file.get() or "results/run_log.csv"
+        print_trials = Path(__file__).parent.parent / "print_trials.csv"
+        
         if self.plot_basic.get():
-            self.research_log.insert(tk.END, "=== Generating Basic Research Plots ===\n")
+            self.research_log.insert(tk.END, "=== Generating Basic Research Plots (Figures 1-3) ===\n")
             self.root.update()
             try:
-                cmd = [sys.executable, "generate_research_plots.py"]
-                result = subprocess.run(cmd, capture_output=True, text=True, 
-                                      cwd=Path(__file__).parent)
-                self.research_log.insert(tk.END, result.stdout)
-                if result.stderr:
-                    self.research_log.insert(tk.END, "\nSTDERR:\n" + result.stderr)
-                if result.returncode == 0:
-                    results.append("Basic plots")
-                else:
+                # Resolve paths relative to code directory
+                code_dir = Path(__file__).parent
+                baseline_path = code_dir / baseline_gcode
+                if not baseline_path.exists() and baseline_gcode == "test.gcode":
+                    baseline_path = code_dir / "test_gcode" / "test.gcode"
+                stabilized_path = code_dir / stabilized_gcode
+                
+                if not baseline_path.exists():
+                    self.research_log.insert(tk.END, f"ERROR: Baseline G-code not found: {baseline_gcode}\n")
                     errors.append("Basic plots")
+                elif not stabilized_path.exists():
+                    self.research_log.insert(tk.END, f"ERROR: Stabilized G-code not found: {stabilized_gcode}\n")
+                    errors.append("Basic plots")
+                else:
+                    # Build command - only include CSV if file exists
+                    cmd = [
+                        sys.executable, "generate_paper_figures.py",
+                        "--baseline-gcode", str(baseline_path),
+                        "--stabilized-gcode", str(stabilized_path),
+                    ]
+                    
+                    # Add CSV argument only if file exists
+                    stabilized_csv_path = code_dir / stabilized_csv
+                    if stabilized_csv_path.exists():
+                        cmd.extend(["--stabilized-csv", str(stabilized_csv_path)])
+                    
+                    cmd.extend(["--figures", "1", "2", "3"])
+                    
+                    result = subprocess.run(cmd, capture_output=True, text=True, 
+                                          cwd=Path(__file__).parent)
+                    self.research_log.insert(tk.END, result.stdout)
+                    if result.stderr:
+                        self.research_log.insert(tk.END, "\nSTDERR:\n" + result.stderr)
+                    if result.returncode == 0:
+                        results.append("Basic plots (Figures 1-3)")
+                    else:
+                        errors.append("Basic plots")
             except Exception as e:
                 self.research_log.insert(tk.END, f"\nERROR: {str(e)}\n")
                 errors.append("Basic plots")
             self.research_log.insert(tk.END, "\n")
         
         if self.plot_advanced.get():
-            self.research_log.insert(tk.END, "=== Generating Advanced Research Plots ===\n")
+            self.research_log.insert(tk.END, "=== Generating Advanced Research Plots (Figures 4-7) ===\n")
             self.root.update()
             try:
-                cmd = [sys.executable, "generate_advanced_plots.py"]
-                result = subprocess.run(cmd, capture_output=True, text=True, 
-                                      cwd=Path(__file__).parent)
-                self.research_log.insert(tk.END, result.stdout)
-                if result.stderr:
-                    self.research_log.insert(tk.END, "\nSTDERR:\n" + result.stderr)
-                if result.returncode == 0:
-                    results.append("Advanced plots")
-                else:
+                if not print_trials.exists():
+                    self.research_log.insert(tk.END, f"ERROR: print_trials.csv not found at {print_trials}\n")
+                    self.research_log.insert(tk.END, "Figures 4-7 require experimental data.\n")
                     errors.append("Advanced plots")
+                else:
+                    cmd = [
+                        sys.executable, "generate_paper_figures.py",
+                        "--baseline-gcode", str(baseline_path),
+                        "--stabilized-gcode", str(stabilized_path),
+                        "--print-trials", str(print_trials),
+                        "--figures", "4", "5", "6", "7"
+                    ]
+                    
+                    result = subprocess.run(cmd, capture_output=True, text=True, 
+                                          cwd=Path(__file__).parent)
+                    self.research_log.insert(tk.END, result.stdout)
+                    if result.stderr:
+                        self.research_log.insert(tk.END, "\nSTDERR:\n" + result.stderr)
+                    if result.returncode == 0:
+                        results.append("Advanced plots (Figures 4-7)")
+                    else:
+                        errors.append("Advanced plots")
             except Exception as e:
                 self.research_log.insert(tk.END, f"\nERROR: {str(e)}\n")
                 errors.append("Advanced plots")
@@ -563,6 +740,71 @@ For more information, see readme.md
                                          f"Generated: {', '.join(results)}")
         else:
             messagebox.showwarning("No Selection", "Please select at least one plot type.")
+    
+    def run_10_figures(self):
+        """Run generate_10_figures.py with selected figures."""
+        self.figures_10_log.delete(1.0, tk.END)
+        self.figures_10_log.insert(tk.END, "Generating selected figures...\n\n")
+        self.root.update()
+        
+        try:
+            # Get file paths from GUI
+            baseline_gcode = self.verify_input.get() or self.viz_original.get() or "test.gcode"
+            stabilized_gcode = self.verify_output.get() or self.viz_stabilized.get() or "results/stabilized.gcode"
+            
+            # Resolve paths relative to code directory
+            code_dir = Path(__file__).parent
+            baseline_path = code_dir / baseline_gcode
+            if not baseline_path.exists() and baseline_gcode == "test.gcode":
+                baseline_path = code_dir / "test_gcode" / "test.gcode"
+            stabilized_path = code_dir / stabilized_gcode
+            
+            if not baseline_path.exists():
+                self.figures_10_log.insert(tk.END, f"ERROR: Baseline G-code not found: {baseline_gcode}\n")
+                messagebox.showerror("Error", f"Baseline G-code not found: {baseline_gcode}")
+                return
+            
+            if not stabilized_path.exists():
+                self.figures_10_log.insert(tk.END, f"ERROR: Stabilized G-code not found: {stabilized_gcode}\n")
+                messagebox.showerror("Error", f"Stabilized G-code not found: {stabilized_gcode}")
+                return
+            
+            # Get selected figures
+            selected_figures = [num for num, var in self.fig_vars.items() if var.get()]
+            if not selected_figures:
+                messagebox.showwarning("No Selection", "Please select at least one figure to generate.")
+                return
+            
+            # Build command
+            cmd = [
+                sys.executable, "generate_10_figures.py",
+                "--baseline-gcode", str(baseline_path),
+                "--stabilized-gcode", str(stabilized_path),
+                "--data-dir", str(code_dir / "data"),
+                "--figures"
+            ] + selected_figures
+            
+            self.figures_10_log.insert(tk.END, f"Running: {' '.join(cmd)}\n\n")
+            self.root.update()
+            
+            result = subprocess.run(cmd, capture_output=True, text=True, 
+                                  cwd=code_dir)
+            
+            self.figures_10_log.insert(tk.END, result.stdout)
+            if result.stderr:
+                self.figures_10_log.insert(tk.END, "\n\nSTDERR:\n" + result.stderr)
+            
+            if result.returncode == 0:
+                messagebox.showinfo("Success", 
+                                  f"Generated {len(selected_figures)} figure(s)!\n\n"
+                                  "Figures are displayed on screen.\n"
+                                  "Use the figure window controls to save them manually.")
+            else:
+                messagebox.showwarning("Warning", "Some figures may have failed. Check the log.")
+        
+        except Exception as e:
+            self.figures_10_log.insert(tk.END, f"\n\nERROR: {str(e)}")
+            messagebox.showerror("Error", f"Failed to generate figures: {str(e)}")
 
 def main():
     root = tk.Tk()

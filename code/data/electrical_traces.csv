@@ -1,0 +1,11 @@
+trace_id,condition,length_mm,resistance_ohm,open_circuit
+1,baseline,50,,1
+2,baseline,50,180,0
+3,baseline,50,,1
+4,baseline,50,260,0
+5,baseline,50,,1
+1,stabilized,50,120,0
+2,stabilized,50,128,0
+3,stabilized,50,116,0
+4,stabilized,50,123,0
+5,stabilized,50,119,0
