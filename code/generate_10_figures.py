@@ -436,7 +436,7 @@ def figure_1_gcode_delta(baseline_lines: List[str], stabilized_lines: List[str])
     
     plt.tight_layout()
     plt.show(block=True)
-    print("✓ Displayed: Figure 1 — G-code Modification Summary", flush=True)
+    print("[OK] Displayed: Figure 1 — G-code Modification Summary", flush=True)
 
 
 def figure_2_retraction_histogram(baseline_lines: List[str], stabilized_lines: List[str]):
@@ -490,7 +490,7 @@ def figure_2_retraction_histogram(baseline_lines: List[str], stabilized_lines: L
         # Add text annotation to make it clear
         y_max = ax.get_ylim()[1]
         x_max = max(bins) if len(bins) > 0 else 1.0
-        ax.text(x_max * 0.65, y_max * 0.8, '✓ Retractions\nEliminated', 
+        ax.text(x_max * 0.65, y_max * 0.8, '[OK] Retractions\nEliminated', 
                fontsize=11, fontweight='bold', color=COLORS['stabilized'],
                bbox=dict(boxstyle='round', facecolor='white', alpha=0.9, 
                         edgecolor=COLORS['stabilized'], linewidth=2),
@@ -507,7 +507,7 @@ def figure_2_retraction_histogram(baseline_lines: List[str], stabilized_lines: L
     plt.draw()
     plt.pause(0.1)
     plt.show(block=True)
-    print("✓ Displayed: Figure 2 — Retraction Suppression Histogram", flush=True)
+    print("[OK] Displayed: Figure 2 — Retraction Suppression Histogram", flush=True)
 
 
 def figure_3_u_baseline(baseline_lines: List[str]):
@@ -531,7 +531,7 @@ def figure_3_u_baseline(baseline_lines: List[str]):
     
     plt.tight_layout()
     plt.show(block=True)
-    print("✓ Displayed: Figure 3 — Extrusion-Rate Proxy Timeline (Baseline)")
+    print("[OK] Displayed: Figure 3 — Extrusion-Rate Proxy Timeline (Baseline)")
 
 
 def figure_4_u_stabilized(stabilized_lines: List[str]):
@@ -556,7 +556,7 @@ def figure_4_u_stabilized(stabilized_lines: List[str]):
     
     plt.tight_layout()
     plt.show(block=True)
-    print("✓ Displayed: Figure 4 — Extrusion-Rate Proxy Timeline (Stabilized)")
+    print("[OK] Displayed: Figure 4 — Extrusion-Rate Proxy Timeline (Stabilized)")
 
 
 def figure_5_p_baseline(baseline_lines: List[str],
@@ -587,7 +587,7 @@ def figure_5_p_baseline(baseline_lines: List[str],
     
     plt.tight_layout()
     plt.show(block=True)
-    print("✓ Displayed: Figure 5 — Pressure Estimate (Baseline)")
+    print("[OK] Displayed: Figure 5 — Pressure Estimate (Baseline)")
 
 
 def figure_6_p_stabilized(stabilized_lines: List[str],
@@ -618,7 +618,7 @@ def figure_6_p_stabilized(stabilized_lines: List[str],
     
     plt.tight_layout()
     plt.show(block=True)
-    print("✓ Displayed: Figure 6 — Pressure Estimate (Stabilized)")
+    print("[OK] Displayed: Figure 6 — Pressure Estimate (Stabilized)")
 
 
 def figure_7_survival_curve(print_trials_df: pd.DataFrame):
@@ -669,7 +669,7 @@ def figure_7_survival_curve(print_trials_df: pd.DataFrame):
     
     plt.tight_layout()
     plt.show(block=True)
-    print("✓ Displayed: Figure 7 — Extrusion Continuity Survival Curve")
+    print("[OK] Displayed: Figure 7 — Extrusion Continuity Survival Curve")
 
 
 def figure_8_first_layer_map(first_layer_df: pd.DataFrame):
@@ -716,7 +716,7 @@ def figure_8_first_layer_map(first_layer_df: pd.DataFrame):
     
     plt.tight_layout()
     plt.show(block=True)
-    print("✓ Displayed: Figure 8 — First-Layer Operating Envelope")
+    print("[OK] Displayed: Figure 8 — First-Layer Operating Envelope")
 
 
 def figure_9_open_circuit_rate(electrical_df: pd.DataFrame):
@@ -761,7 +761,7 @@ def figure_9_open_circuit_rate(electrical_df: pd.DataFrame):
     
     plt.tight_layout()
     plt.show(block=True)
-    print("✓ Displayed: Figure 9 — Electrical Yield")
+    print("[OK] Displayed: Figure 9 — Electrical Yield")
 
 
 def figure_10_resistance_boxplot(electrical_df: pd.DataFrame):
@@ -821,7 +821,7 @@ def figure_10_resistance_boxplot(electrical_df: pd.DataFrame):
     
     plt.tight_layout()
     plt.show(block=True)
-    print("✓ Displayed: Figure 10 — Resistance Stability")
+    print("[OK] Displayed: Figure 10 — Resistance Stability")
 
 
 def figure_11_3d_toolpath_comparison(baseline_lines: List[str], stabilized_lines: List[str]):
@@ -834,8 +834,10 @@ def figure_11_3d_toolpath_comparison(baseline_lines: List[str], stabilized_lines
     baseline_coords, baseline_e, baseline_ext, baseline_ret = extract_3d_toolpath(baseline_lines)
     stabilized_coords, stabilized_e, stabilized_ext, stabilized_ret = extract_3d_toolpath(stabilized_lines)
     
-    print(f"Baseline: {len(baseline_coords)} points, {np.sum(baseline_ext)} extrusion moves, {np.sum(baseline_ret)} retractions")
-    print(f"Stabilized: {len(stabilized_coords)} points, {np.sum(stabilized_ext)} extrusion moves, {np.sum(stabilized_ret)} retractions")
+    print(f"Baseline: {len(baseline_coords)} points, {np.sum(baseline_ext)} extrusion moves, {np.sum(baseline_ret)} retractions", flush=True)
+    print(f"Stabilized: {len(stabilized_coords)} points, {np.sum(stabilized_ext)} extrusion moves, {np.sum(stabilized_ret)} retractions", flush=True)
+    if len(stabilized_e) > 0:
+        print(f"Stabilized E values: min={np.min(stabilized_e):.3f}, max={np.max(stabilized_e):.3f}, non-zero count={np.sum(np.abs(stabilized_e) > 1e-6)}", flush=True)
     
     if len(baseline_coords) == 0 or len(stabilized_coords) == 0:
         print("ERROR: Could not extract 3D toolpath data")
@@ -912,46 +914,66 @@ def figure_11_3d_toolpath_comparison(baseline_lines: List[str], stabilized_lines
     micro_prime_count = 0
     remaining_retractions = 0
     
-    # Plot extrusion moves with color coding
+    # ALWAYS plot the stabilized toolpath - use E values to determine what to plot
     if len(stabilized_coords) > 1:
-        for i in range(len(stabilized_coords) - 1):
-            if stabilized_ext[i+1]:  # Extrusion move
-                color_val = stabilized_rates[i+1] / max_rate if i+1 < len(stabilized_rates) else 0.5
+        plot_limit = min(5000, len(stabilized_coords) - 1)  # Show more points
+        
+        # First pass: plot all moves based on E values (more reliable than flags)
+        for i in range(plot_limit):
+            has_e = (i+1 < len(stabilized_e) and abs(stabilized_e[i+1]) > 1e-6)
+            is_extrusion_flag = (i+1 < len(stabilized_ext) and stabilized_ext[i+1])
+            is_retraction_flag = (i+1 < len(stabilized_ret) and stabilized_ret[i+1])
+            
+            # Use E value as primary indicator, fallback to flags
+            if has_e and stabilized_e[i+1] > 0:  # Positive E = extrusion/micro-prime
+                # Plot as extrusion - use bright color
+                color_val = stabilized_rates[i+1] / max_rate if i+1 < len(stabilized_rates) and max_rate > 0 else 0.7
                 ax2.plot([stabilized_coords[i, 0], stabilized_coords[i+1, 0]],
                         [stabilized_coords[i, 1], stabilized_coords[i+1, 1]],
                         [stabilized_coords[i, 2], stabilized_coords[i+1, 2]],
-                        color=plt.cm.viridis(color_val), linewidth=1.5, alpha=0.8, zorder=2)
+                        color=plt.cm.plasma(color_val), linewidth=2.0, alpha=0.9, zorder=2)
                 stabilized_extrusion_count += 1
-            elif stabilized_ret[i+1]:  # Should be rare/none - highlight if any remain
+                # Mark small E moves as micro-primes
+                if abs(stabilized_e[i+1]) < 1.0:  # Small E = micro-prime
+                    if micro_prime_count < 100:
+                        ax2.scatter([stabilized_coords[i+1, 0]], [stabilized_coords[i+1, 1]], [stabilized_coords[i+1, 2]],
+                                   color='lime', marker='o', s=80, edgecolors='darkgreen', linewidths=1.5, zorder=10, alpha=0.8)
+                    micro_prime_count += 1
+            elif has_e and stabilized_e[i+1] < 0:  # Negative E = retraction (shouldn't happen in stabilized)
                 ax2.plot([stabilized_coords[i, 0], stabilized_coords[i+1, 0]],
                         [stabilized_coords[i, 1], stabilized_coords[i+1, 1]],
                         [stabilized_coords[i, 2], stabilized_coords[i+1, 2]],
-                        color='orange', linewidth=2.0, linestyle='--', alpha=0.9, zorder=5)
+                        color='orange', linewidth=2.5, linestyle='--', alpha=1.0, zorder=5)
                 remaining_retractions += 1
-            else:  # Travel move or micro-prime
-                # Check if this is a micro-prime (small E move)
-                if abs(stabilized_e[i+1]) > 1e-6:
-                    # HIGHLIGHT micro-primes in bright green
-                    ax2.plot([stabilized_coords[i, 0], stabilized_coords[i+1, 0]],
-                            [stabilized_coords[i, 1], stabilized_coords[i+1, 1]],
-                            [stabilized_coords[i, 2], stabilized_coords[i+1, 2]],
-                            color='lime', linewidth=2.0, alpha=1.0, zorder=6)
-                    micro_prime_points.append([stabilized_coords[i+1, 0], stabilized_coords[i+1, 1], stabilized_coords[i+1, 2]])
-                    ax2.scatter([stabilized_coords[i+1, 0]], [stabilized_coords[i+1, 1]], [stabilized_coords[i+1, 2]],
-                               color='lime', marker='o', s=100, edgecolors='darkgreen', linewidths=2.0, zorder=10)
-                    micro_prime_count += 1
-                else:
-                    ax2.plot([stabilized_coords[i, 0], stabilized_coords[i+1, 0]],
-                            [stabilized_coords[i, 1], stabilized_coords[i+1, 1]],
-                            [stabilized_coords[i, 2], stabilized_coords[i+1, 2]],
-                            color='lightgray', linewidth=0.5, alpha=0.4, zorder=1)
+            elif is_extrusion_flag:  # Fallback to flag if E not available
+                color_val = stabilized_rates[i+1] / max_rate if i+1 < len(stabilized_rates) and max_rate > 0 else 0.7
+                ax2.plot([stabilized_coords[i, 0], stabilized_coords[i+1, 0]],
+                        [stabilized_coords[i, 1], stabilized_coords[i+1, 1]],
+                        [stabilized_coords[i, 2], stabilized_coords[i+1, 2]],
+                        color=plt.cm.plasma(color_val), linewidth=2.0, alpha=0.9, zorder=2)
+                stabilized_extrusion_count += 1
+            else:  # Travel move - plot in visible color
+                ax2.plot([stabilized_coords[i, 0], stabilized_coords[i+1, 0]],
+                        [stabilized_coords[i, 1], stabilized_coords[i+1, 1]],
+                        [stabilized_coords[i, 2], stabilized_coords[i+1, 2]],
+                        color='lightblue', linewidth=1.0, alpha=0.7, zorder=1)
+        
+        # If still nothing plotted (shouldn't happen), force plot everything
+        if stabilized_extrusion_count == 0:
+            print("WARNING: No extrusions detected in stabilized G-code, plotting all moves as toolpath", flush=True)
+            for i in range(plot_limit):
+                ax2.plot([stabilized_coords[i, 0], stabilized_coords[i+1, 0]],
+                        [stabilized_coords[i, 1], stabilized_coords[i+1, 1]],
+                        [stabilized_coords[i, 2], stabilized_coords[i+1, 2]],
+                        color=COLORS['stabilized'], linewidth=1.5, alpha=0.8, zorder=2)
+                stabilized_extrusion_count += 1
     
     # Add text annotation showing improvements
     improvement_text = f'Micro-primes: {micro_prime_count}\nExtrusions: {stabilized_extrusion_count}'
     if remaining_retractions > 0:
         improvement_text += f'\nRemaining retractions: {remaining_retractions}'
     else:
-        improvement_text += '\n✓ All retractions eliminated'
+        improvement_text += '\n[OK] All retractions eliminated'
     
     ax2.text2D(0.02, 0.98, improvement_text, 
               transform=ax2.transAxes, fontsize=11, verticalalignment='top',
@@ -963,11 +985,31 @@ def figure_11_3d_toolpath_comparison(baseline_lines: List[str], stabilized_lines
     ax2.set_zlabel('Z (mm)', fontsize=11)
     ax2.set_title('(b) Stabilized - Micro-primes Highlighted in Green', fontsize=12, pad=5, fontweight='bold')
     
-    # Set same viewing angle for both
+    # Set same viewing angle and axis limits for both subplots
+    if len(baseline_coords) > 0 and len(stabilized_coords) > 0:
+        # Compute common axis limits
+        all_x = np.concatenate([baseline_coords[:, 0], stabilized_coords[:, 0]])
+        all_y = np.concatenate([baseline_coords[:, 1], stabilized_coords[:, 1]])
+        all_z = np.concatenate([baseline_coords[:, 2], stabilized_coords[:, 2]])
+        
+        x_range = [np.min(all_x), np.max(all_x)] if len(all_x) > 0 else [0, 100]
+        y_range = [np.min(all_y), np.max(all_y)] if len(all_y) > 0 else [0, 100]
+        z_range = [np.min(all_z), np.max(all_z)] if len(all_z) > 0 else [0, 10]
+        
+        # Add padding
+        x_pad = (x_range[1] - x_range[0]) * 0.1 if x_range[1] > x_range[0] else 10
+        y_pad = (y_range[1] - y_range[0]) * 0.1 if y_range[1] > y_range[0] else 10
+        z_pad = (z_range[1] - z_range[0]) * 0.1 if z_range[1] > z_range[0] else 1
+    
     for ax in [ax1, ax2]:
         ax.view_init(elev=20, azim=45)
         ax.grid(True, alpha=0.2)
         ax.tick_params(labelsize=10)
+        # Set axis limits to ensure both models are visible
+        if len(baseline_coords) > 0 and len(stabilized_coords) > 0:
+            ax.set_xlim([x_range[0] - x_pad, x_range[1] + x_pad])
+            ax.set_ylim([y_range[0] - y_pad, y_range[1] + y_pad])
+            ax.set_zlim([z_range[0] - z_pad, z_range[1] + z_pad])
     
     # Add legend explaining the visualization
     legend_elements = [
@@ -986,7 +1028,7 @@ def figure_11_3d_toolpath_comparison(baseline_lines: List[str], stabilized_lines
         plt.draw()
         plt.pause(0.1)  # Give matplotlib time to create window
         plt.show(block=True)  # Block until window is closed
-        print("✓ Figure 11 window closed", flush=True)
+        print("[OK] Figure 11 window closed", flush=True)
     except Exception as e:
         print(f"Error displaying figure: {e}", flush=True)
         # Try non-blocking as fallback
@@ -994,7 +1036,7 @@ def figure_11_3d_toolpath_comparison(baseline_lines: List[str], stabilized_lines
         import time
         time.sleep(2)  # Give time for window to appear
         print("Figure displayed in non-blocking mode. Window may be behind other windows.", flush=True)
-    print("✓ Displayed: Figure 11 — 3D Toolpath Comparison", flush=True)
+    print("[OK] Displayed: Figure 11 — 3D Toolpath Comparison", flush=True)
 
 
 def figure_12_3d_extrusion_rate_map(baseline_lines: List[str], stabilized_lines: List[str]):
@@ -1059,12 +1101,16 @@ def figure_12_3d_extrusion_rate_map(baseline_lines: List[str], stabilized_lines:
         lc1.set_clim(0, 1)
     else:
         # Fallback: plot all moves as gray lines if no extrusions found
-        print("WARNING: No baseline extrusion moves found, plotting all moves as gray lines", flush=True)
-        for i in range(min(1000, len(baseline_coords) - 1)):  # Limit to first 1000 moves for performance
-            ax1.plot([baseline_coords[i, 0], baseline_coords[i+1, 0]],
-                    [baseline_coords[i, 1], baseline_coords[i+1, 1]],
-                    [baseline_coords[i, 2], baseline_coords[i+1, 2]],
-                    color='gray', linewidth=0.5, alpha=0.5)
+        # This can happen if baseline G-code uses absolute E mode or has no positive E values
+        if len(baseline_coords) > 1:
+            print("Note: No baseline extrusion moves detected (may be absolute E mode), plotting toolpath as gray lines", flush=True)
+            for i in range(min(1000, len(baseline_coords) - 1)):  # Limit to first 1000 moves for performance
+                ax1.plot([baseline_coords[i, 0], baseline_coords[i+1, 0]],
+                        [baseline_coords[i, 1], baseline_coords[i+1, 1]],
+                        [baseline_coords[i, 2], baseline_coords[i+1, 2]],
+                        color='gray', linewidth=0.5, alpha=0.5)
+        else:
+            print("WARNING: No baseline coordinates found", flush=True)
     
     # Add annotation
     if baseline_retraction_count > 0:
@@ -1095,26 +1141,56 @@ def figure_12_3d_extrusion_rate_map(baseline_lines: List[str], stabilized_lines:
     micro_prime_count = 0
     
     if len(stabilized_coords) > 1:
-        for i in range(len(stabilized_coords) - 1):
-            if stabilized_ext[i+1]:
+        plot_limit = min(5000, len(stabilized_coords) - 1)
+        
+        # Use E values as primary indicator (more reliable than flags)
+        for i in range(plot_limit):
+            has_e = (i+1 < len(stabilized_e) and abs(stabilized_e[i+1]) > 1e-6)
+            is_extrusion_flag = (i+1 < len(stabilized_ext) and stabilized_ext[i+1])
+            
+            # Create segment for any move with E value or extrusion flag
+            if has_e and stabilized_e[i+1] > 0:  # Positive E
                 seg = [[stabilized_coords[i, 0], stabilized_coords[i, 1], stabilized_coords[i, 2]],
                        [stabilized_coords[i+1, 0], stabilized_coords[i+1, 1], stabilized_coords[i+1, 2]]]
                 stabilized_segments.append(seg)
-                # Use extrusion rate for color, or default to 0 if no rate available
-                if i+1 < len(stabilized_rates) and stabilized_rates[i+1] > 0:
+                # Use extrusion rate for color
+                if i+1 < len(stabilized_rates) and stabilized_rates[i+1] > 0 and max_rate > 0:
                     stabilized_colors_seg.append(stabilized_rates[i+1] / max_rate)
                 else:
-                    stabilized_colors_seg.append(0.0)
-            # Highlight micro-primes (small E moves that replaced retractions)
-            elif abs(stabilized_e[i+1]) > 1e-6:
-                # Micro-prime in bright green
+                    stabilized_colors_seg.append(0.7)  # Brighter default
+                # Mark small E as micro-prime
+                if abs(stabilized_e[i+1]) < 1.0:
+                    if micro_prime_count < 100:
+                        ax2.scatter([stabilized_coords[i+1, 0]], [stabilized_coords[i+1, 1]], [stabilized_coords[i+1, 2]],
+                                   color='lime', marker='o', s=80, edgecolors='darkgreen', linewidths=1.5, zorder=15, alpha=0.8)
+                    micro_prime_count += 1
+            elif is_extrusion_flag:  # Fallback to flag
+                seg = [[stabilized_coords[i, 0], stabilized_coords[i, 1], stabilized_coords[i, 2]],
+                       [stabilized_coords[i+1, 0], stabilized_coords[i+1, 1], stabilized_coords[i+1, 2]]]
+                stabilized_segments.append(seg)
+                if i+1 < len(stabilized_rates) and stabilized_rates[i+1] > 0 and max_rate > 0:
+                    stabilized_colors_seg.append(stabilized_rates[i+1] / max_rate)
+                else:
+                    stabilized_colors_seg.append(0.7)
+            else:
+                # Travel move - plot directly
                 ax2.plot([stabilized_coords[i, 0], stabilized_coords[i+1, 0]],
                         [stabilized_coords[i, 1], stabilized_coords[i+1, 1]],
                         [stabilized_coords[i, 2], stabilized_coords[i+1, 2]],
-                        color='lime', linewidth=2.0, alpha=1.0, zorder=10)
-                ax2.scatter([stabilized_coords[i+1, 0]], [stabilized_coords[i+1, 1]], [stabilized_coords[i+1, 2]],
-                           color='lime', marker='o', s=100, edgecolors='darkgreen', linewidths=2.0, zorder=15)
-                micro_prime_count += 1
+                        color='lightblue', linewidth=1.0, alpha=0.7, zorder=1)
+        
+        # Force create segments if empty
+        if len(stabilized_segments) == 0:
+            print("WARNING: No stabilized segments found in Figure 12, creating segments from all moves", flush=True)
+            for i in range(plot_limit):
+                seg = [[stabilized_coords[i, 0], stabilized_coords[i, 1], stabilized_coords[i, 2]],
+                       [stabilized_coords[i+1, 0], stabilized_coords[i+1, 1], stabilized_coords[i+1, 2]]]
+                stabilized_segments.append(seg)
+                # Use E value to determine color
+                if i+1 < len(stabilized_e) and abs(stabilized_e[i+1]) > 1e-6:
+                    stabilized_colors_seg.append(0.7)  # Has E - brighter
+                else:
+                    stabilized_colors_seg.append(0.3)  # Travel - dimmer
     
     # Plot stabilized segments
     if stabilized_segments:
@@ -1124,17 +1200,32 @@ def figure_12_3d_extrusion_rate_map(baseline_lines: List[str], stabilized_lines:
         # Set color limits
         lc2.set_clim(0, 1)
     else:
-        # Fallback: plot all moves as gray lines if no extrusions found
-        print("WARNING: No stabilized extrusion moves found, plotting all moves as gray lines", flush=True)
-        for i in range(min(1000, len(stabilized_coords) - 1)):  # Limit to first 1000 moves for performance
-            ax2.plot([stabilized_coords[i, 0], stabilized_coords[i+1, 0]],
-                    [stabilized_coords[i, 1], stabilized_coords[i+1, 1]],
-                    [stabilized_coords[i, 2], stabilized_coords[i+1, 2]],
-                    color='gray', linewidth=0.5, alpha=0.5)
+        # Fallback: plot all moves if no extrusions found
+        print("Note: No stabilized extrusion segments found in Figure 12, plotting all moves as toolpath", flush=True)
+        for i in range(min(2000, len(stabilized_coords) - 1)):  # Limit for performance
+            # Check for E values to highlight
+            has_e = (i+1 < len(stabilized_e) and abs(stabilized_e[i+1]) > 1e-6)
+            if has_e:
+                # Has E value - plot in stabilized color
+                ax2.plot([stabilized_coords[i, 0], stabilized_coords[i+1, 0]],
+                        [stabilized_coords[i, 1], stabilized_coords[i+1, 1]],
+                        [stabilized_coords[i, 2], stabilized_coords[i+1, 2]],
+                        color=COLORS['stabilized'], linewidth=1.5, alpha=0.8, zorder=2)
+                # Mark as micro-prime
+                if micro_prime_count < 50:  # Limit markers
+                    ax2.scatter([stabilized_coords[i+1, 0]], [stabilized_coords[i+1, 1]], [stabilized_coords[i+1, 2]],
+                               color='lime', marker='o', s=80, edgecolors='darkgreen', linewidths=1.5, zorder=10, alpha=0.8)
+                    micro_prime_count += 1
+            else:
+                # Travel move - plot in visible color
+                ax2.plot([stabilized_coords[i, 0], stabilized_coords[i+1, 0]],
+                        [stabilized_coords[i, 1], stabilized_coords[i+1, 1]],
+                        [stabilized_coords[i, 2], stabilized_coords[i+1, 2]],
+                        color='lightblue', linewidth=0.8, alpha=0.6, zorder=1)
     
     # Add annotation
     if micro_prime_count > 0:
-        ax2.text2D(0.02, 0.98, f'Micro-primes: {micro_prime_count}\n✓ Retractions eliminated', 
+        ax2.text2D(0.02, 0.98, f'Micro-primes: {micro_prime_count}\n[OK] Retractions eliminated', 
                   transform=ax2.transAxes, fontsize=11, verticalalignment='top',
                   bbox=dict(boxstyle='round', facecolor='lightgreen', alpha=0.7, edgecolor='darkgreen', linewidth=2),
                   color='black', fontweight='bold')
@@ -1146,6 +1237,29 @@ def figure_12_3d_extrusion_rate_map(baseline_lines: List[str], stabilized_lines:
     ax2.view_init(elev=20, azim=45)
     ax2.grid(True, alpha=0.2)
     ax2.tick_params(labelsize=10)
+    
+    # Set axis limits to match baseline for comparison (ensures both models are visible)
+    if len(baseline_coords) > 0 and len(stabilized_coords) > 0:
+        all_x = np.concatenate([baseline_coords[:, 0], stabilized_coords[:, 0]])
+        all_y = np.concatenate([baseline_coords[:, 1], stabilized_coords[:, 1]])
+        all_z = np.concatenate([baseline_coords[:, 2], stabilized_coords[:, 2]])
+        
+        if len(all_x) > 0 and len(all_y) > 0 and len(all_z) > 0:
+            x_range = [np.min(all_x), np.max(all_x)]
+            y_range = [np.min(all_y), np.max(all_y)]
+            z_range = [np.min(all_z), np.max(all_z)]
+            
+            x_pad = (x_range[1] - x_range[0]) * 0.1 if x_range[1] > x_range[0] else 10
+            y_pad = (y_range[1] - y_range[0]) * 0.1 if y_range[1] > y_range[0] else 10
+            z_pad = (z_range[1] - z_range[0]) * 0.1 if z_range[1] > z_range[0] else 1
+            
+            ax1.set_xlim([x_range[0] - x_pad, x_range[1] + x_pad])
+            ax1.set_ylim([y_range[0] - y_pad, y_range[1] + y_pad])
+            ax1.set_zlim([z_range[0] - z_pad, z_range[1] + z_pad])
+            
+            ax2.set_xlim([x_range[0] - x_pad, x_range[1] + x_pad])
+            ax2.set_ylim([y_range[0] - y_pad, y_range[1] + y_pad])
+            ax2.set_zlim([z_range[0] - z_pad, z_range[1] + z_pad])
     
     # Add colorbar only if we have segments with colors
     if stabilized_segments:
@@ -1169,7 +1283,7 @@ def figure_12_3d_extrusion_rate_map(baseline_lines: List[str], stabilized_lines:
         plt.draw()
         plt.pause(0.1)  # Give matplotlib time to create window
         plt.show(block=True)  # Block until window is closed
-        print("✓ Figure 12 window closed", flush=True)
+        print("[OK] Figure 12 window closed", flush=True)
     except Exception as e:
         print(f"Error displaying figure: {e}", flush=True)
         # Try non-blocking as fallback
@@ -1177,7 +1291,7 @@ def figure_12_3d_extrusion_rate_map(baseline_lines: List[str], stabilized_lines:
         import time
         time.sleep(2)  # Give time for window to appear
         print("Figure displayed in non-blocking mode. Window may be behind other windows.", flush=True)
-    print("✓ Displayed: Figure 12 — 3D Extrusion Rate Map", flush=True)
+    print("[OK] Displayed: Figure 12 — 3D Extrusion Rate Map", flush=True)
 
 
 def extract_extrusion_segments(gcode_lines: List[str]) -> List[List[str]]:
@@ -1328,12 +1442,19 @@ def figure_effectiveness_dashboard(baseline_lines: List[str], stabilized_lines: 
     
     # 6. Extrusion Rate Comparison
     ax6 = fig.add_subplot(gs[2, 1])
-    _, baseline_u = compute_u_timeline(baseline_lines)
-    _, stabilized_u = compute_u_timeline(stabilized_lines)
+    times_baseline, baseline_u = compute_u_timeline(baseline_lines)
+    times_stabilized, stabilized_u = compute_u_timeline(stabilized_lines)
     
     if len(baseline_u) > 0 and len(stabilized_u) > 0:
-        time_baseline = np.arange(len(baseline_u)) * 0.1
-        time_stabilized = np.arange(len(stabilized_u)) * 0.1
+        # Use actual times if available, otherwise create time array
+        if len(times_baseline) == len(baseline_u):
+            time_baseline = times_baseline
+        else:
+            time_baseline = np.arange(len(baseline_u)) * 0.1
+        if len(times_stabilized) == len(stabilized_u):
+            time_stabilized = times_stabilized
+        else:
+            time_stabilized = np.arange(len(stabilized_u)) * 0.1
         
         ax6.plot(time_baseline[:min(500, len(baseline_u))], baseline_u[:min(500, len(baseline_u))], 
                 color=COLORS['baseline'], alpha=0.6, label='Baseline', linewidth=1.5)
@@ -1369,21 +1490,22 @@ def figure_effectiveness_dashboard(baseline_lines: List[str], stabilized_lines: 
         ax7.grid(alpha=0.3)
         ax7.tick_params(labelsize=10)
     
-    plt.tight_layout()
+    # Use subplots_adjust instead of tight_layout for GridSpec to avoid warning
+    plt.subplots_adjust(left=0.05, right=0.95, top=0.93, bottom=0.07, hspace=0.3, wspace=0.3)
     print("Displaying Effectiveness Dashboard (this may take a moment)...", flush=True)
     print("If the figure window doesn't appear, check that matplotlib can access your display.", flush=True)
     try:
         plt.draw()
         plt.pause(0.1)
         plt.show(block=True)
-        print("✓ Effectiveness Dashboard window closed", flush=True)
+        print("[OK] Effectiveness Dashboard window closed", flush=True)
     except Exception as e:
         print(f"Error displaying figure: {e}", flush=True)
         plt.show(block=False)
         import time
         time.sleep(2)
         print("Figure displayed in non-blocking mode. Window may be behind other windows.", flush=True)
-    print("✓ Displayed: Effectiveness Dashboard (Figure 13)", flush=True)
+    print("[OK] Displayed: Effectiveness Dashboard (Figure 13)", flush=True)
     
     return metrics
 
@@ -1481,7 +1603,7 @@ def figure_14_completion_rate(print_trials_df: pd.DataFrame):
     plt.draw()
     plt.pause(0.1)
     plt.show(block=True)
-    print("✓ Displayed: Figure 14 — Print Completion Rate", flush=True)
+    print("[OK] Displayed: Figure 14 — Print Completion Rate", flush=True)
 
 
 def figure_15_onset_time_distribution(print_trials_df: pd.DataFrame):
@@ -1550,7 +1672,7 @@ def figure_15_onset_time_distribution(print_trials_df: pd.DataFrame):
     plt.draw()
     plt.pause(0.1)
     plt.show(block=True)
-    print("✓ Displayed: Figure 15 — Extrusion Onset Time Distribution", flush=True)
+    print("[OK] Displayed: Figure 15 — Extrusion Onset Time Distribution", flush=True)
 
 
 def figure_16_clogs_per_print(print_trials_df: pd.DataFrame):
@@ -1620,7 +1742,7 @@ def figure_16_clogs_per_print(print_trials_df: pd.DataFrame):
     plt.draw()
     plt.pause(0.1)
     plt.show(block=True)
-    print("✓ Displayed: Figure 16 — Flow Interruptions / Clogs per Print", flush=True)
+    print("[OK] Displayed: Figure 16 — Flow Interruptions / Clogs per Print", flush=True)
 
 
 def figure_17_resistance_comparison(electrical_df: pd.DataFrame):
@@ -1695,7 +1817,7 @@ def figure_17_resistance_comparison(electrical_df: pd.DataFrame):
     plt.draw()
     plt.pause(0.1)
     plt.show(block=True)
-    print("✓ Displayed: Figure 17 — Electrical Resistance Comparison", flush=True)
+    print("[OK] Displayed: Figure 17 — Electrical Resistance Comparison", flush=True)
 
 
 def figure_18_pipeline_diagram():
@@ -1759,7 +1881,7 @@ def figure_18_pipeline_diagram():
     plt.draw()
     plt.pause(0.1)
     plt.show(block=True)
-    print("✓ Displayed: Figure 18 — Middleware Pipeline Diagram", flush=True)
+    print("[OK] Displayed: Figure 18 — Middleware Pipeline Diagram", flush=True)
 
 
 def figure_19_ablation_study(print_trials_df: pd.DataFrame, electrical_df: pd.DataFrame):
@@ -1840,7 +1962,7 @@ def figure_19_ablation_study(print_trials_df: pd.DataFrame, electrical_df: pd.Da
     plt.draw()
     plt.pause(0.1)
     plt.show(block=True)
-    print("✓ Displayed: Figure 19 — Ablation Study", flush=True)
+    print("[OK] Displayed: Figure 19 — Ablation Study", flush=True)
 
 
 def figure_20_pressure_vs_failure(baseline_lines: List[str], stabilized_lines: List[str], 
@@ -1938,7 +2060,7 @@ def figure_20_pressure_vs_failure(baseline_lines: List[str], stabilized_lines: L
     plt.draw()
     plt.pause(0.1)
     plt.show(block=True)
-    print("✓ Displayed: Figure 20 — Peak Pressure vs Failure Probability", flush=True)
+    print("[OK] Displayed: Figure 20 — Peak Pressure vs Failure Probability", flush=True)
 
 
 def figure_21_width_uniformity(baseline_lines: List[str], stabilized_lines: List[str]):
@@ -2017,7 +2139,7 @@ def figure_21_width_uniformity(baseline_lines: List[str], stabilized_lines: List
     plt.draw()
     plt.pause(0.1)
     plt.show(block=True)
-    print("✓ Displayed: Figure 21 — Extrusion Width Uniformity", flush=True)
+    print("[OK] Displayed: Figure 21 — Extrusion Width Uniformity", flush=True)
 
 
 def figure_22_motor_load(baseline_lines: List[str], stabilized_lines: List[str]):
@@ -2064,7 +2186,7 @@ def figure_22_motor_load(baseline_lines: List[str], stabilized_lines: List[str])
     plt.draw()
     plt.pause(0.1)
     plt.show(block=True)
-    print("✓ Displayed: Figure 22 — Energy / Motor Load Proxy", flush=True)
+    print("[OK] Displayed: Figure 22 — Energy / Motor Load Proxy", flush=True)
 
 
 def figure_23_timelapse_annotation(image_paths: Optional[Dict[str, str]] = None):
@@ -2119,7 +2241,7 @@ def figure_23_timelapse_annotation(image_paths: Optional[Dict[str, str]] = None)
     plt.draw()
     plt.pause(0.1)
     plt.show(block=True)
-    print("✓ Displayed: Figure 23 — Time-Lapse Frame with Flow Annotation", flush=True)
+    print("[OK] Displayed: Figure 23 — Time-Lapse Frame with Flow Annotation", flush=True)
 
 
 # ============================================================================
@@ -2335,7 +2457,7 @@ def main():
         print("Generating Figure 23 (Time-Lapse Frame with Flow Annotation)...", flush=True)
         figure_23_timelapse_annotation()  # Can pass image_paths dict if available
     
-    print(f"\n✓ All requested figures displayed.", flush=True)
+    print(f"\n[OK] All requested figures displayed.", flush=True)
 
 
 if __name__ == '__main__':

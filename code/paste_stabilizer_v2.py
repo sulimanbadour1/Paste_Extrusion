@@ -627,6 +627,7 @@ class PasteStabilizerV2:
                 y = parse_float_token(code_stripped, "Y")
                 z = parse_float_token(code_stripped, "Z")
                 f = parse_float_token(code_stripped, "F")
+                e_token = parse_float_token(code_stripped, "E")
 
                 # Update kinematic state (only update if value is present)
                 if x is not None:
@@ -637,6 +638,10 @@ class PasteStabilizerV2:
                     self.k.z = z
                 if f is not None:
                     self.k.f = f
+                
+                # A2 FIX: Update E tracking even for non-extrusion moves (if E token present)
+                if e_token is not None and self.extrusion_mode == "ABS":
+                    self.k.e_abs_prev = e_token
 
             out.append(raw.rstrip("\n"))
 
