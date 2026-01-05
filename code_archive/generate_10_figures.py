@@ -275,21 +275,22 @@ def compute_pressure_timeline(times: np.ndarray, u_values: np.ndarray,
     return p_hat
 
 
-def extract_3d_toolpath(gcode_lines: List[str]) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+def extract_3d_toolpath(gcode_lines: List[str]) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """
     Extract 3D toolpath coordinates and extrusion information from G-code.
-    Returns: (coords [Nx3], e_deltas [N], extrusion_flags [N], retraction_flags [N])
+    Returns: (coords [Nx3], e_deltas [N], extrusion_flags [N], retraction_flags [N], feed_rates [N])
     """
     coords = []
     e_deltas = []
     extrusion_flags = []
     retraction_flags = []
+    feed_rates = []
     
     x_curr, y_curr, z_curr = None, None, 0.0
     x_prev, y_prev, z_prev = None, None, 0.0
     e_cumulative = 0.0
-    e_prev = 0.0
     is_relative_e = True  # Default to relative (M83)
+    f_curr = None
     
     for line in gcode_lines:
         stripped = line.strip()
@@ -322,6 +323,8 @@ def extract_3d_toolpath(gcode_lines: List[str]) -> Tuple[np.ndarray, np.ndarray,
                 y_curr = parsed['Y']
             if parsed['Z'] is not None:
                 z_curr = parsed['Z']
+            if parsed['F'] is not None:
+                f_curr = parsed['F']
             
             # Use previous position if current move doesn't specify coordinates
             x_to_use = x_curr if x_curr is not None else x_prev
@@ -338,40 +341,48 @@ def extract_3d_toolpath(gcode_lines: List[str]) -> Tuple[np.ndarray, np.ndarray,
                 else:
                     e_delta = e_val - e_cumulative
                     e_cumulative = e_val
-                
-                e_prev = e_cumulative
             
             # Record point if we have valid coordinates
-            if x_to_use is not None and y_to_use is not None:
+            # IMPORTANT: Record ALL moves, even if X/Y not explicitly set (use previous position)
+            if x_prev is not None and y_prev is not None:  # We have a previous position
                 coords.append([x_to_use, y_to_use, z_to_use])
                 e_deltas.append(e_delta)
                 extrusion_flags.append(e_delta > 1e-6)
                 retraction_flags.append(e_delta < -1e-6)
+                feed_rates.append(f_curr if f_curr is not None else 0.0)
+            elif x_to_use is not None and y_to_use is not None:  # Current move has coordinates
+                coords.append([x_to_use, y_to_use, z_to_use])
+                e_deltas.append(e_delta)
+                extrusion_flags.append(e_delta > 1e-6)
+                retraction_flags.append(e_delta < -1e-6)
+                feed_rates.append(f_curr if f_curr is not None else 0.0)
     
     if len(coords) == 0:
-        return np.array([]).reshape(0, 3), np.array([]), np.array([], dtype=bool), np.array([], dtype=bool)
+        return (np.array([]).reshape(0, 3), np.array([]), np.array([], dtype=bool), 
+                np.array([], dtype=bool), np.array([]))
     
-    return np.array(coords), np.array(e_deltas), np.array(extrusion_flags), np.array(retraction_flags)
+    return (np.array(coords), np.array(e_deltas), np.array(extrusion_flags), 
+            np.array(retraction_flags), np.array(feed_rates))
 
 
-def compute_extrusion_rate_3d(coords: np.ndarray, e_deltas: np.ndarray) -> np.ndarray:
+def compute_extrusion_rate_3d(coords: np.ndarray, e_deltas: np.ndarray, feed_rates: np.ndarray) -> np.ndarray:
     """
-    Compute extrusion rate (E per mm) for 3D visualization.
+    Compute extrusion rate (E/mm) for each segment.
     """
-    if len(coords) < 2:
-        return np.zeros(len(coords))
-    
     rates = np.zeros(len(coords))
-    for i in range(1, len(coords)):
-        dx = coords[i, 0] - coords[i-1, 0]
-        dy = coords[i, 1] - coords[i-1, 1]
-        dz = coords[i, 2] - coords[i-1, 2]
-        dist = np.sqrt(dx**2 + dy**2 + dz**2)
-        
-        if dist > 1e-6:
-            rates[i] = abs(e_deltas[i]) / dist
-        else:
-            rates[i] = rates[i-1] if i > 0 else 0.0
+    
+    for i in range(len(coords) - 1):
+        if e_deltas[i+1] > 1e-6:  # Extrusion move
+            # Compute distance
+            dx = coords[i+1, 0] - coords[i, 0]
+            dy = coords[i+1, 1] - coords[i, 1]
+            dz = coords[i+1, 2] - coords[i, 2]
+            dist = np.sqrt(dx*dx + dy*dy + dz*dz)
+            
+            if dist > 1e-6:
+                rates[i+1] = e_deltas[i+1] / dist
+            else:
+                rates[i+1] = 0.0
     
     return rates
 
@@ -829,34 +840,33 @@ def figure_11_3d_toolpath_comparison(baseline_lines: List[str], stabilized_lines
     Fig. 11 — 3D Toolpath Comparison (Before/After)
     Side-by-side 3D visualization showing geometry preservation and retraction elimination
     """
-    print("Extracting 3D toolpaths...")
-    # Extract toolpaths
-    baseline_coords, baseline_e, baseline_ext, baseline_ret = extract_3d_toolpath(baseline_lines)
-    stabilized_coords, stabilized_e, stabilized_ext, stabilized_ret = extract_3d_toolpath(stabilized_lines)
+    print("Extracting 3D toolpaths from complete G-code...", flush=True)
+    # Extract toolpaths - GET ALL MOVES
+    baseline_coords, baseline_e, baseline_ext, baseline_ret, baseline_f = extract_3d_toolpath(baseline_lines)
+    stabilized_coords, stabilized_e, stabilized_ext, stabilized_ret, stabilized_f = extract_3d_toolpath(stabilized_lines)
     
-    print(f"Baseline: {len(baseline_coords)} points, {np.sum(baseline_ext)} extrusion moves, {np.sum(baseline_ret)} retractions", flush=True)
-    print(f"Stabilized: {len(stabilized_coords)} points, {np.sum(stabilized_ext)} extrusion moves, {np.sum(stabilized_ret)} retractions", flush=True)
-    if len(stabilized_e) > 0:
-        print(f"Stabilized E values: min={np.min(stabilized_e):.3f}, max={np.max(stabilized_e):.3f}, non-zero count={np.sum(np.abs(stabilized_e) > 1e-6)}", flush=True)
+    print(f"Baseline: {len(baseline_coords)} points extracted, {np.sum(baseline_ext)} extrusions, {np.sum(baseline_ret)} retractions", flush=True)
+    print(f"Stabilized: {len(stabilized_coords)} points extracted, {np.sum(stabilized_ext)} extrusions, {np.sum(stabilized_ret)} retractions", flush=True)
+    print(f"Will plot ALL {len(baseline_coords)} baseline moves and ALL {len(stabilized_coords)} stabilized moves (complete models)", flush=True)
     
     if len(baseline_coords) == 0 or len(stabilized_coords) == 0:
-        print("ERROR: Could not extract 3D toolpath data")
-        print(f"  Baseline coords: {len(baseline_coords)}, Stabilized coords: {len(stabilized_coords)}")
-        print("  This might indicate the G-code files don't contain valid toolpath data.")
+        print("ERROR: Could not extract 3D toolpath data", flush=True)
         return
     
-    print("Creating 3D plot...")
-    
-    # Compute extrusion rates for coloring
-    baseline_rates = compute_extrusion_rate_3d(baseline_coords, baseline_e)
-    stabilized_rates = compute_extrusion_rate_3d(stabilized_coords, stabilized_e)
+    # Compute extrusion rates
+    baseline_rates = compute_extrusion_rate_3d(baseline_coords, baseline_e, baseline_f)
+    stabilized_rates = compute_extrusion_rate_3d(stabilized_coords, stabilized_e, stabilized_f)
     
     # Normalize rates for colormap
-    max_rate = max(np.max(baseline_rates), np.max(stabilized_rates)) if len(baseline_rates) > 0 and len(stabilized_rates) > 0 else 1.0
+    all_rates = np.concatenate([baseline_rates[baseline_rates > 0], stabilized_rates[stabilized_rates > 0]])
+    max_rate = np.max(all_rates) if len(all_rates) > 0 else 1.0
+    min_rate = np.min(all_rates) if len(all_rates) > 0 else 0.0
     if max_rate < 1e-6:
         max_rate = 1.0
     
-    fig = plt.figure(figsize=(16, 8))
+    # Create figure with enhanced styling (matching 3d_map.py)
+    fig = plt.figure(figsize=(6, 6), facecolor='white')
+    fig.patch.set_facecolor('white')
     
     # Baseline (left)
     ax1 = fig.add_subplot(121, projection='3d')

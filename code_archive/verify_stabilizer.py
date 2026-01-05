@@ -31,18 +31,36 @@ def parse_gcode_line(line: str) -> dict:
     return result
 
 def count_retractions(gcode_lines: List[str]) -> int:
-    """Count retractions (negative E moves) in G-code."""
+    """Count retractions (negative E moves) in G-code.
+    
+    IMPORTANT: Stabilized G-code should be in relative mode (M83).
+    In relative mode, only negative E values are retractions.
+    In absolute mode, we need to track E decreases, but G92 resets can cause false positives.
+    """
     retractions = 0
     e_prev = 0.0
-    is_relative_e = True
+    is_relative_e = True  # Default assumption: stabilized G-code uses relative mode
     
     for line in gcode_lines:
         stripped = line.strip()
+        stripped_upper = stripped.upper()
+        
+        # Check for mode changes (in commands or comments)
+        if 'M83' in stripped_upper:
+            is_relative_e = True
+            e_prev = 0.0  # Reset tracking
+        elif 'M82' in stripped_upper:
+            is_relative_e = False
+            e_prev = 0.0  # Reset tracking
+        
+        # Handle G92 E resets (common in stabilized G-code)
+        if stripped_upper.startswith('G92'):
+            parsed = parse_gcode_line(line)
+            if parsed['E'] is not None:
+                e_prev = parsed['E']  # Update tracking after reset
+            continue
+        
         if not stripped or stripped.startswith(';'):
-            if 'M83' in stripped.upper():
-                is_relative_e = True
-            elif 'M82' in stripped.upper():
-                is_relative_e = False
             continue
         
         if stripped.startswith('G0') or stripped.startswith('G1'):
@@ -50,10 +68,14 @@ def count_retractions(gcode_lines: List[str]) -> int:
             if parsed['E'] is not None:
                 e_val = parsed['E']
                 if is_relative_e:
+                    # In relative mode: negative E is a retraction
                     if e_val < -1e-6:
                         retractions += 1
                 else:
-                    if e_val < e_prev - 1e-6:
+                    # In absolute mode: E decreasing significantly is a retraction
+                    # But ignore small decreases that might be due to rounding or resets
+                    # Only count if E decreases by more than 0.1 (significant retraction)
+                    if e_val < e_prev - 0.1:
                         retractions += 1
                     e_prev = e_val
     
@@ -80,12 +102,14 @@ def check_modes(gcode_lines: List[str]) -> Tuple[bool, List[str]]:
     has_g90 = False
     has_m83 = False
     
-    # Check first 50 lines for mode settings
-    for line in gcode_lines[:50]:
+    # Check first 400 lines for mode settings (header can be longer)
+    for line in gcode_lines[:400]:
         stripped = line.strip().upper()
-        if stripped.startswith('G90'):
+        # Check for G90 (can be in command or comment)
+        if stripped.startswith('G90') or 'G90' in stripped:
             has_g90 = True
-        if stripped.startswith('M83'):
+        # Check for M83 (can be in command or comment)
+        if stripped.startswith('M83') or 'M83' in stripped:
             has_m83 = True
     
     if not has_g90:
