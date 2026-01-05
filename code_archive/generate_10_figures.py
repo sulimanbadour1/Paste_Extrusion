@@ -868,136 +868,198 @@ def figure_11_3d_toolpath_comparison(baseline_lines: List[str], stabilized_lines
     fig = plt.figure(figsize=(6, 6), facecolor='white')
     fig.patch.set_facecolor('white')
     
-    # Baseline (left)
-    ax1 = fig.add_subplot(121, projection='3d')
+    # ========================================================================
+    # SINGLE PLOT - Both Models Overlaid (matching 3d_map.py logic)
+    # ========================================================================
+    ax = fig.add_subplot(111, projection='3d')
     
-    # Track retraction locations for highlighting
-    retraction_points = []
-    extrusion_count = 0
-    retraction_count = 0
+    baseline_retraction_count = 0
+    baseline_extrusion_count = 0
+    baseline_travel_count = 0
+    # PLOT ALL POINTS - No limit to show complete model
+    plot_limit_baseline = len(baseline_coords) - 1
     
-    # Plot extrusion moves with color coding
-    if len(baseline_coords) > 1:
-        for i in range(len(baseline_coords) - 1):
-            if baseline_ext[i+1]:  # Extrusion move
-                color_val = baseline_rates[i+1] / max_rate if i+1 < len(baseline_rates) else 0.5
-                ax1.plot([baseline_coords[i, 0], baseline_coords[i+1, 0]],
-                        [baseline_coords[i, 1], baseline_coords[i+1, 1]],
-                        [baseline_coords[i, 2], baseline_coords[i+1, 2]],
-                        color=plt.cm.viridis(color_val), linewidth=1.5, alpha=0.8, zorder=2)
-                extrusion_count += 1
-            elif baseline_ret[i+1]:  # Retraction - HIGHLIGHT THESE
-                # Draw retraction line in bright red with thicker line
-                ax1.plot([baseline_coords[i, 0], baseline_coords[i+1, 0]],
-                        [baseline_coords[i, 1], baseline_coords[i+1, 1]],
-                        [baseline_coords[i, 2], baseline_coords[i+1, 2]],
-                        color='red', linewidth=2.5, linestyle='--', alpha=1.0, zorder=5)
-                # Mark retraction point with large X marker
-                retraction_points.append([baseline_coords[i+1, 0], baseline_coords[i+1, 1], baseline_coords[i+1, 2]])
-                ax1.scatter([baseline_coords[i+1, 0]], [baseline_coords[i+1, 1]], [baseline_coords[i+1, 2]],
-                           color='red', marker='X', s=150, linewidths=2.5, edgecolors='darkred', zorder=10)
-                retraction_count += 1
-            else:  # Travel move
-                ax1.plot([baseline_coords[i, 0], baseline_coords[i+1, 0]],
-                        [baseline_coords[i, 1], baseline_coords[i+1, 1]],
-                        [baseline_coords[i, 2], baseline_coords[i+1, 2]],
-                        color='lightgray', linewidth=0.5, alpha=0.4, zorder=1)
+    print(f"Plotting {plot_limit_baseline} baseline moves (complete model)...", flush=True)
     
-    # Add text annotation showing retraction count
-    if retraction_count > 0:
-        ax1.text2D(0.02, 0.98, f'Retractions: {retraction_count}\nExtrusions: {extrusion_count}', 
-                  transform=ax1.transAxes, fontsize=11, verticalalignment='top',
-                  bbox=dict(boxstyle='round', facecolor='yellow', alpha=0.7, edgecolor='red', linewidth=2),
-                  color='black', fontweight='bold')
+    # Collect all segments for efficient batch plotting (matching 3d_map.py)
+    baseline_retraction_segments = []
+    baseline_retraction_coords = []
+    baseline_extrusion_segments = []
+    baseline_extrusion_colors = []
+    baseline_travel_segments = []
     
-    ax1.set_xlabel('X (mm)', fontsize=11)
-    ax1.set_ylabel('Y (mm)', fontsize=11)
-    ax1.set_zlabel('Z (mm)', fontsize=11)
-    ax1.set_title('(a) Baseline - Retractions Highlighted in Red', fontsize=12, pad=5, fontweight='bold')
+    print("Processing baseline moves...", flush=True)
+    for i in range(plot_limit_baseline):
+        has_e = (i+1 < len(baseline_e) and abs(baseline_e[i+1]) > 1e-6)
+        is_retraction = (i+1 < len(baseline_ret) and baseline_ret[i+1])
+        is_extrusion = (i+1 < len(baseline_ext) and baseline_ext[i+1])
+        
+        seg = [[baseline_coords[i, 0], baseline_coords[i, 1], baseline_coords[i, 2]],
+               [baseline_coords[i+1, 0], baseline_coords[i+1, 1], baseline_coords[i+1, 2]]]
+        
+        if is_retraction or (has_e and baseline_e[i+1] < 0):
+            # RETRACTION - Collect for batch plotting
+            baseline_retraction_segments.append(seg)
+            baseline_retraction_coords.append(baseline_coords[i+1])
+            baseline_retraction_count += 1
+        elif is_extrusion or (has_e and baseline_e[i+1] > 0):
+            # EXTRUSION - Collect with color
+            baseline_extrusion_segments.append(seg)
+            color_val = (baseline_rates[i+1] - min_rate) / (max_rate - min_rate) if max_rate > min_rate else 0.7
+            color_val = np.clip(color_val, 0.0, 1.0)
+            baseline_extrusion_colors.append(color_val)
+            baseline_extrusion_count += 1
+        else:
+            # TRAVEL MOVE
+            baseline_travel_segments.append(seg)
+            baseline_travel_count += 1
     
-    # Stabilized (right)
-    ax2 = fig.add_subplot(122, projection='3d')
+    # Plot in batches for efficiency (matching 3d_map.py)
+    print(f"Plotting {len(baseline_travel_segments)} travel moves, {len(baseline_extrusion_segments)} extrusions, {len(baseline_retraction_segments)} retractions...", flush=True)
     
-    # Track micro-prime locations for highlighting
-    micro_prime_points = []
+    # ========================================================================
+    # PLOT BASELINE MODEL (Dim, for context)
+    # ========================================================================
+    # Plot baseline travel moves very dim (background context only)
+    if baseline_travel_segments:
+        lc_travel_b = Line3DCollection(baseline_travel_segments, colors='#d0d0d0', linewidths=0.3, alpha=0.2, zorder=1)
+        ax.add_collection3d(lc_travel_b)
+    
+    # Plot baseline extrusions dim (context) - improved visibility
+    if baseline_extrusion_segments:
+        lc_ext_b = Line3DCollection(baseline_extrusion_segments, colors='#888888', linewidths=0.8, alpha=0.4, zorder=2)
+        ax.add_collection3d(lc_ext_b)
+    
+    # Plot baseline retractions - THIS IS THE KEY DIFFERENCE - enhanced visibility
+    if baseline_retraction_segments:
+        lc_ret_b = Line3DCollection(baseline_retraction_segments, colors='#d62728', linewidths=2.5, linestyles='-', alpha=0.95, zorder=30)
+        ax.add_collection3d(lc_ret_b)
+        # Mark retraction points clearly - bigger markers
+        if len(baseline_retraction_coords) > 0:
+            ret_coords_array = np.array(baseline_retraction_coords)
+            # Sample markers for clarity
+            if len(ret_coords_array) > 400:
+                step = len(ret_coords_array) // 400
+                ret_coords_array = ret_coords_array[::step]
+            ax.scatter(ret_coords_array[:, 0], ret_coords_array[:, 1], ret_coords_array[:, 2],
+                       color='#d62728', marker='X', s=60, linewidths=1.2, edgecolors='#8b0000', zorder=35, alpha=0.95)
+    
+    # ========================================================================
+    # PLOT STABILIZED MODEL (Highlighted, showing the solution)
+    # ========================================================================
     stabilized_extrusion_count = 0
     micro_prime_count = 0
     remaining_retractions = 0
+    stabilized_travel_count = 0
+    # PLOT ALL POINTS - No limit to show complete model
+    plot_limit_stabilized = len(stabilized_coords) - 1
     
-    # ALWAYS plot the stabilized toolpath - use E values to determine what to plot
-    if len(stabilized_coords) > 1:
-        plot_limit = min(5000, len(stabilized_coords) - 1)  # Show more points
-        
-        # First pass: plot all moves based on E values (more reliable than flags)
-        for i in range(plot_limit):
-            has_e = (i+1 < len(stabilized_e) and abs(stabilized_e[i+1]) > 1e-6)
-            is_extrusion_flag = (i+1 < len(stabilized_ext) and stabilized_ext[i+1])
-            is_retraction_flag = (i+1 < len(stabilized_ret) and stabilized_ret[i+1])
-            
-            # Use E value as primary indicator, fallback to flags
-            if has_e and stabilized_e[i+1] > 0:  # Positive E = extrusion/micro-prime
-                # Plot as extrusion - use bright color
-                color_val = stabilized_rates[i+1] / max_rate if i+1 < len(stabilized_rates) and max_rate > 0 else 0.7
-                ax2.plot([stabilized_coords[i, 0], stabilized_coords[i+1, 0]],
-                        [stabilized_coords[i, 1], stabilized_coords[i+1, 1]],
-                        [stabilized_coords[i, 2], stabilized_coords[i+1, 2]],
-                        color=plt.cm.plasma(color_val), linewidth=2.0, alpha=0.9, zorder=2)
-                stabilized_extrusion_count += 1
-                # Mark small E moves as micro-primes
-                if abs(stabilized_e[i+1]) < 1.0:  # Small E = micro-prime
-                    if micro_prime_count < 100:
-                        ax2.scatter([stabilized_coords[i+1, 0]], [stabilized_coords[i+1, 1]], [stabilized_coords[i+1, 2]],
-                                   color='lime', marker='o', s=80, edgecolors='darkgreen', linewidths=1.5, zorder=10, alpha=0.8)
-                    micro_prime_count += 1
-            elif has_e and stabilized_e[i+1] < 0:  # Negative E = retraction (shouldn't happen in stabilized)
-                ax2.plot([stabilized_coords[i, 0], stabilized_coords[i+1, 0]],
-                        [stabilized_coords[i, 1], stabilized_coords[i+1, 1]],
-                        [stabilized_coords[i, 2], stabilized_coords[i+1, 2]],
-                        color='orange', linewidth=2.5, linestyle='--', alpha=1.0, zorder=5)
-                remaining_retractions += 1
-            elif is_extrusion_flag:  # Fallback to flag if E not available
-                color_val = stabilized_rates[i+1] / max_rate if i+1 < len(stabilized_rates) and max_rate > 0 else 0.7
-                ax2.plot([stabilized_coords[i, 0], stabilized_coords[i+1, 0]],
-                        [stabilized_coords[i, 1], stabilized_coords[i+1, 1]],
-                        [stabilized_coords[i, 2], stabilized_coords[i+1, 2]],
-                        color=plt.cm.plasma(color_val), linewidth=2.0, alpha=0.9, zorder=2)
-                stabilized_extrusion_count += 1
-            else:  # Travel move - plot in visible color
-                ax2.plot([stabilized_coords[i, 0], stabilized_coords[i+1, 0]],
-                        [stabilized_coords[i, 1], stabilized_coords[i+1, 1]],
-                        [stabilized_coords[i, 2], stabilized_coords[i+1, 2]],
-                        color='lightblue', linewidth=1.0, alpha=0.7, zorder=1)
-        
-        # If still nothing plotted (shouldn't happen), force plot everything
-        if stabilized_extrusion_count == 0:
-            print("WARNING: No extrusions detected in stabilized G-code, plotting all moves as toolpath", flush=True)
-            for i in range(plot_limit):
-                ax2.plot([stabilized_coords[i, 0], stabilized_coords[i+1, 0]],
-                        [stabilized_coords[i, 1], stabilized_coords[i+1, 1]],
-                        [stabilized_coords[i, 2], stabilized_coords[i+1, 2]],
-                        color=COLORS['stabilized'], linewidth=1.5, alpha=0.8, zorder=2)
-                stabilized_extrusion_count += 1
+    print(f"Plotting {plot_limit_stabilized} stabilized moves (complete model)...", flush=True)
     
-    # Add text annotation showing improvements
-    improvement_text = f'Micro-primes: {micro_prime_count}\nExtrusions: {stabilized_extrusion_count}'
-    if remaining_retractions > 0:
-        improvement_text += f'\nRemaining retractions: {remaining_retractions}'
+    # Collect all segments for efficient batch plotting
+    stabilized_micro_prime_segments = []
+    stabilized_micro_prime_coords = []
+    stabilized_extrusion_segments = []
+    stabilized_extrusion_colors = []
+    stabilized_travel_segments = []
+    stabilized_remaining_retraction_segments = []
+    
+    print("Processing stabilized moves...", flush=True)
+    for i in range(plot_limit_stabilized):
+        has_e = (i+1 < len(stabilized_e) and abs(stabilized_e[i+1]) > 1e-6)
+        is_retraction = (i+1 < len(stabilized_ret) and stabilized_ret[i+1])
+        is_extrusion = (i+1 < len(stabilized_ext) and stabilized_ext[i+1])
+        
+        seg = [[stabilized_coords[i, 0], stabilized_coords[i, 1], stabilized_coords[i, 2]],
+               [stabilized_coords[i+1, 0], stabilized_coords[i+1, 1], stabilized_coords[i+1, 2]]]
+        
+        if is_retraction or (has_e and stabilized_e[i+1] < 0):
+            # REMAINING RETRACTION (shouldn't happen)
+            stabilized_remaining_retraction_segments.append(seg)
+            remaining_retractions += 1
+        elif has_e and stabilized_e[i+1] > 0 and abs(stabilized_e[i+1]) < 1.0:  # Small E = micro-prime
+            # MICRO-PRIME - Collect for batch plotting
+            stabilized_micro_prime_segments.append(seg)
+            stabilized_micro_prime_coords.append(stabilized_coords[i+1])
+            micro_prime_count += 1
+            stabilized_extrusion_count += 1
+        elif has_e and stabilized_e[i+1] > 0 and abs(stabilized_e[i+1]) >= 1.0:
+            # REGULAR EXTRUSION
+            stabilized_extrusion_segments.append(seg)
+            color_val = (stabilized_rates[i+1] - min_rate) / (max_rate - min_rate) if max_rate > min_rate else 0.7
+            color_val = np.clip(color_val, 0.0, 1.0)
+            stabilized_extrusion_colors.append(color_val)
+            stabilized_extrusion_count += 1
+        elif is_extrusion:
+            # Fallback to flag
+            stabilized_extrusion_segments.append(seg)
+            color_val = (stabilized_rates[i+1] - min_rate) / (max_rate - min_rate) if max_rate > min_rate else 0.7
+            color_val = np.clip(color_val, 0.0, 1.0)
+            stabilized_extrusion_colors.append(color_val)
+            stabilized_extrusion_count += 1
+        else:
+            # TRAVEL MOVE
+            stabilized_travel_segments.append(seg)
+            stabilized_travel_count += 1
+    
+    # Plot in batches for efficiency
+    print(f"Plotting {len(stabilized_travel_segments)} travel moves, {len(stabilized_extrusion_segments)} extrusions, {len(stabilized_micro_prime_segments)} micro-primes...", flush=True)
+    
+    # Plot stabilized travel moves very dim (background context only)
+    if stabilized_travel_segments:
+        lc_travel_s = Line3DCollection(stabilized_travel_segments, colors='#d0d0d0', linewidths=0.3, alpha=0.2, zorder=1)
+        ax.add_collection3d(lc_travel_s)
+    
+    # Plot stabilized extrusions dim (context) - improved visibility
+    if stabilized_extrusion_segments:
+        lc_ext_s = Line3DCollection(stabilized_extrusion_segments, colors='#888888', linewidths=0.8, alpha=0.4, zorder=2)
+        ax.add_collection3d(lc_ext_s)
+    
+    # Plot micro-primes VERY prominently - THIS IS THE KEY DIFFERENCE - enhanced visibility
+    if stabilized_micro_prime_segments:
+        lc_mp = Line3DCollection(stabilized_micro_prime_segments, colors='#2ca02c', linewidths=2.5, alpha=1.0, zorder=40)
+        ax.add_collection3d(lc_mp)
+        # Mark micro-prime points clearly - bigger markers
+        if len(stabilized_micro_prime_coords) > 0:
+            mp_coords_array = np.array(stabilized_micro_prime_coords)
+            # Sample markers for clarity
+            if len(mp_coords_array) > 400:
+                step = len(mp_coords_array) // 400
+                mp_coords_array = mp_coords_array[::step]
+            ax.scatter(mp_coords_array[:, 0], mp_coords_array[:, 1], mp_coords_array[:, 2],
+                       color='#2ca02c', marker='o', s=60, linewidths=1.2, edgecolors='#006400', zorder=45, alpha=1.0)
+    
+    # Plot remaining retractions if any (shouldn't happen)
+    if stabilized_remaining_retraction_segments:
+        lc_ret_s = Line3DCollection(stabilized_remaining_retraction_segments, colors='#ff7f0e', linewidths=2.5, linestyles='--', alpha=1.0, zorder=15)
+        ax.add_collection3d(lc_ret_s)
+    
+    # Enhanced annotation showing both - bigger and more prominent
+    annotation_text = f'Baseline: {baseline_retraction_count} retractions (red)\n'
+    if remaining_retractions == 0:
+        annotation_text += f'Stabilized: {micro_prime_count} micro-primes (green), 0 retractions'
     else:
-        improvement_text += '\n[OK] All retractions eliminated'
+        annotation_text += f'Stabilized: {micro_prime_count} micro-primes, {remaining_retractions} retractions'
     
-    ax2.text2D(0.02, 0.98, improvement_text, 
-              transform=ax2.transAxes, fontsize=11, verticalalignment='top',
-              bbox=dict(boxstyle='round', facecolor='lightgreen', alpha=0.7, edgecolor='darkgreen', linewidth=2),
+    ax.text2D(0.02, 0.98, annotation_text, 
+              transform=ax.transAxes, fontsize=11, verticalalignment='top',
+              bbox=dict(boxstyle='round,pad=0.6', facecolor='white', alpha=0.98, 
+                       edgecolor='black', linewidth=2.0),
               color='black', fontweight='bold')
     
-    ax2.set_xlabel('X (mm)', fontsize=11)
-    ax2.set_ylabel('Y (mm)', fontsize=11)
-    ax2.set_zlabel('Z (mm)', fontsize=11)
-    ax2.set_title('(b) Stabilized - Micro-primes Highlighted in Green', fontsize=12, pad=5, fontweight='bold')
+    # Enhanced axis labels and title
+    ax.set_xlabel('X (mm)', fontsize=12, fontweight='bold', labelpad=10)
+    ax.set_ylabel('Y (mm)', fontsize=12, fontweight='bold', labelpad=10)
+    ax.set_zlabel('Z (mm)', fontsize=12, fontweight='bold', labelpad=10)
+    ax.set_title('3D Toolpath Comparison: Baseline vs Stabilized', fontsize=14, pad=12, fontweight='bold')
+    ax.view_init(elev=25, azim=45)
+    ax.grid(True, alpha=0.4, linestyle='--', linewidth=0.8)
+    ax.tick_params(labelsize=10, width=1.0)
     
-    # Set same viewing angle and axis limits for both subplots
+    # ========================================================================
+    # Synchronize Axis Limits and Viewing Angle - SAME PLANE
+    # ========================================================================
     if len(baseline_coords) > 0 and len(stabilized_coords) > 0:
-        # Compute common axis limits
         all_x = np.concatenate([baseline_coords[:, 0], stabilized_coords[:, 0]])
         all_y = np.concatenate([baseline_coords[:, 1], stabilized_coords[:, 1]])
         all_z = np.concatenate([baseline_coords[:, 2], stabilized_coords[:, 2]])
@@ -1007,30 +1069,44 @@ def figure_11_3d_toolpath_comparison(baseline_lines: List[str], stabilized_lines
         z_range = [np.min(all_z), np.max(all_z)] if len(all_z) > 0 else [0, 10]
         
         # Add padding
-        x_pad = (x_range[1] - x_range[0]) * 0.1 if x_range[1] > x_range[0] else 10
-        y_pad = (y_range[1] - y_range[0]) * 0.1 if y_range[1] > y_range[0] else 10
-        z_pad = (z_range[1] - z_range[0]) * 0.1 if z_range[1] > z_range[0] else 1
+        x_pad = (x_range[1] - x_range[0]) * 0.05 if x_range[1] > x_range[0] else 5
+        y_pad = (y_range[1] - y_range[0]) * 0.05 if y_range[1] > y_range[0] else 5
+        z_pad = (z_range[1] - z_range[0]) * 0.05 if z_range[1] > z_range[0] else 0.5
+        
+        # Set axis limits for single plot
+        x_min, x_max = x_range[0] - x_pad, x_range[1] + x_pad
+        y_min, y_max = y_range[0] - y_pad, y_range[1] + y_pad
+        z_min, z_max = max(0, z_range[0] - z_pad), z_range[1] + z_pad
+        
+        ax.set_xlim(x_min, x_max)
+        ax.set_ylim(y_min, y_max)
+        ax.set_zlim(z_min, z_max)
+        
+        print(f"View: elev=25, azim=45, limits: X[{x_min:.1f}, {x_max:.1f}], Y[{y_min:.1f}, {y_max:.1f}], Z[{z_min:.1f}, {z_max:.1f}]", flush=True)
     
-    for ax in [ax1, ax2]:
-        ax.view_init(elev=20, azim=45)
-        ax.grid(True, alpha=0.2)
-        ax.tick_params(labelsize=10)
-        # Set axis limits to ensure both models are visible
-        if len(baseline_coords) > 0 and len(stabilized_coords) > 0:
-            ax.set_xlim([x_range[0] - x_pad, x_range[1] + x_pad])
-            ax.set_ylim([y_range[0] - y_pad, y_range[1] + y_pad])
-            ax.set_zlim([z_range[0] - z_pad, z_range[1] + z_pad])
-    
-    # Add legend explaining the visualization
+    # ========================================================================
+    # Enhanced Legend - Bigger and More Prominent
+    # ========================================================================
+    from matplotlib.lines import Line2D
     legend_elements = [
-        Patch(facecolor='red', edgecolor='darkred', label='Retractions (Baseline)'),
-        Patch(facecolor='lime', edgecolor='darkgreen', label='Micro-primes (Stabilized)'),
-        Patch(facecolor='blue', alpha=0.5, label='Extrusion moves'),
-        Patch(facecolor='lightgray', alpha=0.5, label='Travel moves')
+        Line2D([0], [0], color='#d62728', linewidth=3, label='Retractions (Baseline)'),
+        Line2D([0], [0], color='#2ca02c', linewidth=3, label='Micro-primes (Stabilized)'),
     ]
-    fig.legend(handles=legend_elements, loc='lower center', ncol=4, fontsize=10, framealpha=0.9)
+    # Make legend much bigger and more prominent
+    legend = fig.legend(handles=legend_elements, loc='lower center', ncol=2, 
+                       fontsize=14, frameon=True, fancybox=True, shadow=False, 
+                       framealpha=0.98, edgecolor='black', facecolor='white',
+                       bbox_to_anchor=(0.5, 0.01), columnspacing=3.0, 
+                       handlelength=4.0, handletextpad=1.0, borderpad=1.2)
+    # Make legend text bold
+    for text in legend.get_texts():
+        text.set_fontweight('bold')
+        text.set_fontsize(14)
     
-    plt.tight_layout(rect=[0, 0.05, 1, 1])  # Make room for legend
+    # ========================================================================
+    # Save or Display
+    # ========================================================================
+    plt.tight_layout(rect=[0, 0.08, 1, 0.98])  # Leave more space for bigger legend
     print("Displaying Figure 11 (this may take a moment)...", flush=True)
     print("If the figure window doesn't appear, check that matplotlib can access your display.", flush=True)
     try:
@@ -1055,16 +1131,16 @@ def figure_12_3d_extrusion_rate_map(baseline_lines: List[str], stabilized_lines:
     Color-coded 3D toolpath showing extrusion rate intensity
     """
     # Extract toolpaths
-    baseline_coords, baseline_e, baseline_ext, baseline_ret = extract_3d_toolpath(baseline_lines)
-    stabilized_coords, stabilized_e, stabilized_ext, _ = extract_3d_toolpath(stabilized_lines)
+    baseline_coords, baseline_e, baseline_ext, baseline_ret, baseline_f = extract_3d_toolpath(baseline_lines)
+    stabilized_coords, stabilized_e, stabilized_ext, _, stabilized_f = extract_3d_toolpath(stabilized_lines)
     
     if len(baseline_coords) == 0 or len(stabilized_coords) == 0:
         print("WARNING: Could not extract 3D toolpath data")
         return
     
     # Compute extrusion rates
-    baseline_rates = compute_extrusion_rate_3d(baseline_coords, baseline_e)
-    stabilized_rates = compute_extrusion_rate_3d(stabilized_coords, stabilized_e)
+    baseline_rates = compute_extrusion_rate_3d(baseline_coords, baseline_e, baseline_f)
+    stabilized_rates = compute_extrusion_rate_3d(stabilized_coords, stabilized_e, stabilized_f)
     
     # Normalize rates
     max_rate = max(np.max(baseline_rates), np.max(stabilized_rates)) if len(baseline_rates) > 0 and len(stabilized_rates) > 0 else 1.0
@@ -1432,8 +1508,8 @@ def figure_effectiveness_dashboard(baseline_lines: List[str], stabilized_lines: 
     ax4.axis('off')
     
     # 5-7. Before/After Comparisons (Bottom row)
-    baseline_coords, baseline_e, baseline_ext, baseline_ret = extract_3d_toolpath(baseline_lines)
-    stabilized_coords, stabilized_e, stabilized_ext, stabilized_ret = extract_3d_toolpath(stabilized_lines)
+    baseline_coords, baseline_e, baseline_ext, baseline_ret, baseline_f = extract_3d_toolpath(baseline_lines)
+    stabilized_coords, stabilized_e, stabilized_ext, stabilized_ret, stabilized_f = extract_3d_toolpath(stabilized_lines)
     
     # 5. Retraction Distribution
     ax5 = fig.add_subplot(gs[2, 0])
