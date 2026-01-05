@@ -1289,36 +1289,65 @@ def figure_12_3d_extrusion_rate_map(baseline_lines: List[str], stabilized_lines:
         
         print(f"Collected {len(stabilized_segments)} extrusion segments, {len(stabilized_travel_segments)} travel segments", flush=True)
     
-    # Plot stabilized segments
+    # Plot stabilized segments using Line3DCollection for efficiency
+    print(f"Plotting {len(stabilized_segments)} stabilized extrusion segments...", flush=True)
+    
+    # Plot travel moves first (background)
+    if stabilized_travel_segments:
+        lc_travel = Line3DCollection(stabilized_travel_segments, colors='#d0d0d0', linewidths=0.3, alpha=0.2, zorder=1)
+        ax2.add_collection3d(lc_travel)
+    
+    # Plot extrusion segments with color coding
     if stabilized_segments:
-        lc2 = Line3DCollection(stabilized_segments, cmap=plt.cm.viridis, linewidths=1.5, alpha=0.85)
+        if len(stabilized_colors_seg) != len(stabilized_segments):
+            # Ensure colors array matches segments
+            print(f"WARNING: Color array length ({len(stabilized_colors_seg)}) doesn't match segments ({len(stabilized_segments)}), fixing...", flush=True)
+            while len(stabilized_colors_seg) < len(stabilized_segments):
+                stabilized_colors_seg.append(0.7)  # Default color
+            stabilized_colors_seg = stabilized_colors_seg[:len(stabilized_segments)]
+        
+        lc2 = Line3DCollection(stabilized_segments, cmap=plt.cm.viridis, linewidths=1.5, alpha=0.85, zorder=2)
         lc2.set_array(np.array(stabilized_colors_seg))
         ax2.add_collection3d(lc2)
         # Set color limits
         lc2.set_clim(0, 1)
+        
+        # Add colorbar
+        cbar2 = plt.colorbar(lc2, ax=ax2, pad=0.1, shrink=0.8)
+        cbar2.set_label('Extrusion Rate (E/mm)', fontsize=10)
+        cbar2.ax.tick_params(labelsize=9)
+        
+        # Mark micro-primes (sample for clarity)
+        if micro_prime_count > 0:
+            micro_prime_coords = []
+            plot_limit_mp = min(len(stabilized_coords) - 1, 50000)  # Limit for performance
+            for i in range(plot_limit_mp):
+                if i+1 < len(stabilized_e) and stabilized_e[i+1] > 0 and abs(stabilized_e[i+1]) < 1.0:
+                    micro_prime_coords.append(stabilized_coords[i+1])
+                    if len(micro_prime_coords) >= 400:  # Limit markers for performance
+                        break
+            
+            if len(micro_prime_coords) > 0:
+                mp_coords_array = np.array(micro_prime_coords)
+                # Sample if too many
+                if len(mp_coords_array) > 400:
+                    step = len(mp_coords_array) // 400
+                    mp_coords_array = mp_coords_array[::step]
+                ax2.scatter(mp_coords_array[:, 0], mp_coords_array[:, 1], mp_coords_array[:, 2],
+                           color='#2ca02c', marker='o', s=60, linewidths=1.2, edgecolors='#006400', zorder=15, alpha=1.0)
     else:
-        # Fallback: plot all moves if no extrusions found
-        print("Note: No stabilized extrusion segments found in Figure 12, plotting all moves as toolpath", flush=True)
-        for i in range(min(2000, len(stabilized_coords) - 1)):  # Limit for performance
+        # Fallback: plot all moves if no extrusions found (shouldn't happen)
+        print("WARNING: No stabilized extrusion segments found in Figure 12, plotting all moves as toolpath", flush=True)
+        plot_limit_fallback = min(10000, len(stabilized_coords) - 1)  # Limit for performance
+        for i in range(plot_limit_fallback):
             # Check for E values to highlight
             has_e = (i+1 < len(stabilized_e) and abs(stabilized_e[i+1]) > 1e-6)
-            if has_e:
+            if has_e and stabilized_e[i+1] > 0:
                 # Has E value - plot in stabilized color
                 ax2.plot([stabilized_coords[i, 0], stabilized_coords[i+1, 0]],
                         [stabilized_coords[i, 1], stabilized_coords[i+1, 1]],
                         [stabilized_coords[i, 2], stabilized_coords[i+1, 2]],
                         color=COLORS['stabilized'], linewidth=1.5, alpha=0.8, zorder=2)
-                # Mark as micro-prime
-                if micro_prime_count < 50:  # Limit markers
-                    ax2.scatter([stabilized_coords[i+1, 0]], [stabilized_coords[i+1, 1]], [stabilized_coords[i+1, 2]],
-                               color='lime', marker='o', s=80, edgecolors='darkgreen', linewidths=1.5, zorder=10, alpha=0.8)
-                    micro_prime_count += 1
-            else:
-                # Travel move - plot in visible color
-                ax2.plot([stabilized_coords[i, 0], stabilized_coords[i+1, 0]],
-                        [stabilized_coords[i, 1], stabilized_coords[i+1, 1]],
-                        [stabilized_coords[i, 2], stabilized_coords[i+1, 2]],
-                        color='lightblue', linewidth=0.8, alpha=0.6, zorder=1)
     
     # Add annotation
     if micro_prime_count > 0:
@@ -1357,16 +1386,6 @@ def figure_12_3d_extrusion_rate_map(baseline_lines: List[str], stabilized_lines:
                 ax.set_zlim([z_range[0] - z_pad, z_range[1] + z_pad])
             # Also synchronize view angles
             ax2.view_init(elev=20, azim=45)  # Match ax1
-            
-            ax2.set_xlim([x_range[0] - x_pad, x_range[1] + x_pad])
-            ax2.set_ylim([y_range[0] - y_pad, y_range[1] + y_pad])
-            ax2.set_zlim([z_range[0] - z_pad, z_range[1] + z_pad])
-    
-    # Add colorbar only if we have segments with colors
-    if stabilized_segments:
-        cbar2 = plt.colorbar(lc2, ax=ax2, pad=0.1, shrink=0.8)
-        cbar2.set_label('Extrusion Rate (E/mm)', fontsize=10)
-        cbar2.ax.tick_params(labelsize=9)
     
     # Add legend for Figure 12
     legend_elements_12 = [
