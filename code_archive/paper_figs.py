@@ -240,22 +240,29 @@ def compute_pressure_timeline(times: np.ndarray, u_values: np.ndarray,
     return p_hat
 
 
-def extract_3d_toolpath(gcode_lines: List[str]) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-    """Extract 3D toolpath coordinates and extrusion information."""
+def extract_3d_toolpath(gcode_lines: List[str]) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """
+    Extract 3D toolpath coordinates and extrusion information from G-code.
+    Returns: (coords [Nx3], e_deltas [N], extrusion_flags [N], retraction_flags [N], feed_rates [N])
+    """
     coords = []
     e_deltas = []
     extrusion_flags = []
     retraction_flags = []
+    feed_rates = []
     
     x_curr, y_curr, z_curr = None, None, 0.0
+    x_prev, y_prev, z_prev = None, None, 0.0
     e_cumulative = 0.0
-    is_relative_e = True
+    is_relative_e = True  # Default to relative (M83)
+    f_curr = None
     
     for line in gcode_lines:
         stripped = line.strip()
-        if not stripped or stripped.startswith(';'):
+        if not stripped:
             continue
         
+        # Check for M83/M82
         if 'M83' in stripped.upper():
             is_relative_e = True
             continue
@@ -263,36 +270,64 @@ def extract_3d_toolpath(gcode_lines: List[str]) -> Tuple[np.ndarray, np.ndarray,
             is_relative_e = False
             continue
         
+        if stripped.startswith(';'):
+            continue
+        
         if stripped.startswith('G0') or stripped.startswith('G1'):
             parsed = parse_gcode_line(line)
             
+            # Store previous position
+            x_prev = x_curr
+            y_prev = y_curr
+            z_prev = z_curr
+            
+            # Update position
             if parsed['X'] is not None:
                 x_curr = parsed['X']
             if parsed['Y'] is not None:
                 y_curr = parsed['Y']
             if parsed['Z'] is not None:
                 z_curr = parsed['Z']
+            if parsed['F'] is not None:
+                f_curr = parsed['F']
             
-            if x_curr is not None and y_curr is not None:
-                e_delta = 0.0
-                if parsed['E'] is not None:
-                    e_val = parsed['E']
-                    if is_relative_e:
-                        e_delta = e_val
-                        e_cumulative += e_val
-                    else:
-                        e_delta = e_val - e_cumulative
-                        e_cumulative = e_val
-                
-                coords.append([x_curr, y_curr, z_curr])
+            # Use previous position if current move doesn't specify coordinates
+            x_to_use = x_curr if x_curr is not None else x_prev
+            y_to_use = y_curr if y_curr is not None else y_prev
+            z_to_use = z_curr if z_curr is not None else (z_prev if z_prev is not None else 0.0)
+            
+            # Handle extrusion
+            e_delta = 0.0
+            if parsed['E'] is not None:
+                e_val = parsed['E']
+                if is_relative_e:
+                    e_delta = e_val
+                    e_cumulative += e_val
+                else:
+                    e_delta = e_val - e_cumulative
+                    e_cumulative = e_val
+            
+            # Record point if we have valid coordinates
+            # IMPORTANT: Record ALL moves, even if X/Y not explicitly set (use previous position)
+            if x_prev is not None and y_prev is not None:  # We have a previous position
+                coords.append([x_to_use, y_to_use, z_to_use])
                 e_deltas.append(e_delta)
                 extrusion_flags.append(e_delta > 1e-6)
                 retraction_flags.append(e_delta < -1e-6)
+                feed_rates.append(f_curr if f_curr is not None else 0.0)
+            elif x_to_use is not None and y_to_use is not None:  # Current move has coordinates
+                coords.append([x_to_use, y_to_use, z_to_use])
+                e_deltas.append(e_delta)
+                extrusion_flags.append(e_delta > 1e-6)
+                retraction_flags.append(e_delta < -1e-6)
+                feed_rates.append(f_curr if f_curr is not None else 0.0)
     
     if len(coords) == 0:
-        return np.array([]).reshape(0, 3), np.array([]), np.array([], dtype=bool), np.array([], dtype=bool)
+        return (np.array([]).reshape(0, 3), np.array([]), np.array([], dtype=bool), 
+                np.array([], dtype=bool), np.array([]))
     
-    return np.array(coords), np.array(e_deltas), np.array(extrusion_flags), np.array(retraction_flags)
+    return (np.array(coords), np.array(e_deltas), np.array(extrusion_flags), 
+            np.array(retraction_flags), np.array(feed_rates))
 
 
 def wilson_confidence_interval(successes: int, total: int, z: float = 1.96) -> Tuple[float, float]:
@@ -785,8 +820,8 @@ def figure_9_3d_toolpath_comparison(baseline_lines: List[str], stabilized_lines:
     Figure 9: 3D toolpath comparison
     Side-by-side 3D visualization with retractions highlighted
     """
-    baseline_coords, baseline_e, baseline_ext, baseline_ret = extract_3d_toolpath(baseline_lines)
-    stabilized_coords, stabilized_e, stabilized_ext, stabilized_ret = extract_3d_toolpath(stabilized_lines)
+    baseline_coords, baseline_e, baseline_ext, baseline_ret, baseline_f = extract_3d_toolpath(baseline_lines)
+    stabilized_coords, stabilized_e, stabilized_ext, stabilized_ret, stabilized_f = extract_3d_toolpath(stabilized_lines)
     
     if len(baseline_coords) == 0 or len(stabilized_coords) == 0:
         print("WARNING: Could not extract 3D toolpath data", flush=True)

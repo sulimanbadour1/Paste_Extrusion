@@ -864,14 +864,15 @@ def figure_11_3d_toolpath_comparison(baseline_lines: List[str], stabilized_lines
     if max_rate < 1e-6:
         max_rate = 1.0
     
-    # Create figure with enhanced styling (matching 3d_map.py)
-    fig = plt.figure(figsize=(6, 6), facecolor='white')
+    # Create figure with side-by-side subplots (before/after)
+    fig = plt.figure(figsize=(16, 8), facecolor='white')
     fig.patch.set_facecolor('white')
     
     # ========================================================================
-    # SINGLE PLOT - Both Models Overlaid (matching 3d_map.py logic)
+    # SIDE-BY-SIDE SUBPLOTS - Baseline (left) and Stabilized (right)
     # ========================================================================
-    ax = fig.add_subplot(111, projection='3d')
+    # Baseline (left)
+    ax1 = fig.add_subplot(121, projection='3d')
     
     baseline_retraction_count = 0
     baseline_extrusion_count = 0
@@ -914,26 +915,26 @@ def figure_11_3d_toolpath_comparison(baseline_lines: List[str], stabilized_lines
             baseline_travel_segments.append(seg)
             baseline_travel_count += 1
     
-    # Plot in batches for efficiency (matching 3d_map.py)
+    # Plot in batches for efficiency
     print(f"Plotting {len(baseline_travel_segments)} travel moves, {len(baseline_extrusion_segments)} extrusions, {len(baseline_retraction_segments)} retractions...", flush=True)
     
     # ========================================================================
-    # PLOT BASELINE MODEL (Dim, for context)
+    # PLOT BASELINE MODEL (Left subplot)
     # ========================================================================
     # Plot baseline travel moves very dim (background context only)
     if baseline_travel_segments:
         lc_travel_b = Line3DCollection(baseline_travel_segments, colors='#d0d0d0', linewidths=0.3, alpha=0.2, zorder=1)
-        ax.add_collection3d(lc_travel_b)
+        ax1.add_collection3d(lc_travel_b)
     
     # Plot baseline extrusions dim (context) - improved visibility
     if baseline_extrusion_segments:
         lc_ext_b = Line3DCollection(baseline_extrusion_segments, colors='#888888', linewidths=0.8, alpha=0.4, zorder=2)
-        ax.add_collection3d(lc_ext_b)
+        ax1.add_collection3d(lc_ext_b)
     
     # Plot baseline retractions - THIS IS THE KEY DIFFERENCE - enhanced visibility
     if baseline_retraction_segments:
         lc_ret_b = Line3DCollection(baseline_retraction_segments, colors='#d62728', linewidths=2.5, linestyles='-', alpha=0.95, zorder=30)
-        ax.add_collection3d(lc_ret_b)
+        ax1.add_collection3d(lc_ret_b)
         # Mark retraction points clearly - bigger markers
         if len(baseline_retraction_coords) > 0:
             ret_coords_array = np.array(baseline_retraction_coords)
@@ -941,8 +942,28 @@ def figure_11_3d_toolpath_comparison(baseline_lines: List[str], stabilized_lines
             if len(ret_coords_array) > 400:
                 step = len(ret_coords_array) // 400
                 ret_coords_array = ret_coords_array[::step]
-            ax.scatter(ret_coords_array[:, 0], ret_coords_array[:, 1], ret_coords_array[:, 2],
+            ax1.scatter(ret_coords_array[:, 0], ret_coords_array[:, 1], ret_coords_array[:, 2],
                        color='#d62728', marker='X', s=60, linewidths=1.2, edgecolors='#8b0000', zorder=35, alpha=0.95)
+    
+    # Baseline subplot labels and title
+    ax1.set_xlabel('X (mm)', fontsize=12, fontweight='bold', labelpad=10)
+    ax1.set_ylabel('Y (mm)', fontsize=12, fontweight='bold', labelpad=10)
+    ax1.set_zlabel('Z (mm)', fontsize=12, fontweight='bold', labelpad=10)
+    ax1.set_title('(a) Baseline - Retractions Highlighted in Red', fontsize=14, pad=12, fontweight='bold')
+    ax1.view_init(elev=25, azim=45)
+    ax1.grid(True, alpha=0.4, linestyle='--', linewidth=0.8)
+    ax1.tick_params(labelsize=10, width=1.0)
+    
+    # Add annotation for baseline
+    if baseline_retraction_count > 0:
+        ax1.text2D(0.02, 0.98, f'Retractions: {baseline_retraction_count}\nExtrusions: {baseline_extrusion_count}', 
+                  transform=ax1.transAxes, fontsize=11, verticalalignment='top',
+                  bbox=dict(boxstyle='round,pad=0.6', facecolor='white', alpha=0.98, 
+                           edgecolor='black', linewidth=2.0),
+                  color='black', fontweight='bold')
+    
+    # Stabilized (right)
+    ax2 = fig.add_subplot(122, projection='3d')
     
     # ========================================================================
     # PLOT STABILIZED MODEL (Highlighted, showing the solution)
@@ -1005,20 +1026,23 @@ def figure_11_3d_toolpath_comparison(baseline_lines: List[str], stabilized_lines
     # Plot in batches for efficiency
     print(f"Plotting {len(stabilized_travel_segments)} travel moves, {len(stabilized_extrusion_segments)} extrusions, {len(stabilized_micro_prime_segments)} micro-primes...", flush=True)
     
+    # ========================================================================
+    # PLOT STABILIZED MODEL (Right subplot)
+    # ========================================================================
     # Plot stabilized travel moves very dim (background context only)
     if stabilized_travel_segments:
         lc_travel_s = Line3DCollection(stabilized_travel_segments, colors='#d0d0d0', linewidths=0.3, alpha=0.2, zorder=1)
-        ax.add_collection3d(lc_travel_s)
+        ax2.add_collection3d(lc_travel_s)
     
     # Plot stabilized extrusions dim (context) - improved visibility
     if stabilized_extrusion_segments:
         lc_ext_s = Line3DCollection(stabilized_extrusion_segments, colors='#888888', linewidths=0.8, alpha=0.4, zorder=2)
-        ax.add_collection3d(lc_ext_s)
+        ax2.add_collection3d(lc_ext_s)
     
     # Plot micro-primes VERY prominently - THIS IS THE KEY DIFFERENCE - enhanced visibility
     if stabilized_micro_prime_segments:
         lc_mp = Line3DCollection(stabilized_micro_prime_segments, colors='#2ca02c', linewidths=2.5, alpha=1.0, zorder=40)
-        ax.add_collection3d(lc_mp)
+        ax2.add_collection3d(lc_mp)
         # Mark micro-prime points clearly - bigger markers
         if len(stabilized_micro_prime_coords) > 0:
             mp_coords_array = np.array(stabilized_micro_prime_coords)
@@ -1026,38 +1050,38 @@ def figure_11_3d_toolpath_comparison(baseline_lines: List[str], stabilized_lines
             if len(mp_coords_array) > 400:
                 step = len(mp_coords_array) // 400
                 mp_coords_array = mp_coords_array[::step]
-            ax.scatter(mp_coords_array[:, 0], mp_coords_array[:, 1], mp_coords_array[:, 2],
+            ax2.scatter(mp_coords_array[:, 0], mp_coords_array[:, 1], mp_coords_array[:, 2],
                        color='#2ca02c', marker='o', s=60, linewidths=1.2, edgecolors='#006400', zorder=45, alpha=1.0)
     
     # Plot remaining retractions if any (shouldn't happen)
     if stabilized_remaining_retraction_segments:
         lc_ret_s = Line3DCollection(stabilized_remaining_retraction_segments, colors='#ff7f0e', linewidths=2.5, linestyles='--', alpha=1.0, zorder=15)
-        ax.add_collection3d(lc_ret_s)
+        ax2.add_collection3d(lc_ret_s)
     
-    # Enhanced annotation showing both - bigger and more prominent
-    annotation_text = f'Baseline: {baseline_retraction_count} retractions (red)\n'
+    # Stabilized subplot labels and title
+    ax2.set_xlabel('X (mm)', fontsize=12, fontweight='bold', labelpad=10)
+    ax2.set_ylabel('Y (mm)', fontsize=12, fontweight='bold', labelpad=10)
+    ax2.set_zlabel('Z (mm)', fontsize=12, fontweight='bold', labelpad=10)
+    ax2.set_title('(b) Stabilized - Micro-primes Highlighted in Green', fontsize=14, pad=12, fontweight='bold')
+    ax2.view_init(elev=25, azim=45)
+    ax2.grid(True, alpha=0.4, linestyle='--', linewidth=0.8)
+    ax2.tick_params(labelsize=10, width=1.0)
+    
+    # Add annotation for stabilized
+    improvement_text = f'Micro-primes: {micro_prime_count}\nExtrusions: {stabilized_extrusion_count}'
     if remaining_retractions == 0:
-        annotation_text += f'Stabilized: {micro_prime_count} micro-primes (green), 0 retractions'
+        improvement_text += '\n[OK] All retractions eliminated'
     else:
-        annotation_text += f'Stabilized: {micro_prime_count} micro-primes, {remaining_retractions} retractions'
+        improvement_text += f'\nRemaining retractions: {remaining_retractions}'
     
-    ax.text2D(0.02, 0.98, annotation_text, 
-              transform=ax.transAxes, fontsize=11, verticalalignment='top',
+    ax2.text2D(0.02, 0.98, improvement_text, 
+              transform=ax2.transAxes, fontsize=11, verticalalignment='top',
               bbox=dict(boxstyle='round,pad=0.6', facecolor='white', alpha=0.98, 
                        edgecolor='black', linewidth=2.0),
               color='black', fontweight='bold')
     
-    # Enhanced axis labels and title
-    ax.set_xlabel('X (mm)', fontsize=12, fontweight='bold', labelpad=10)
-    ax.set_ylabel('Y (mm)', fontsize=12, fontweight='bold', labelpad=10)
-    ax.set_zlabel('Z (mm)', fontsize=12, fontweight='bold', labelpad=10)
-    ax.set_title('3D Toolpath Comparison: Baseline vs Stabilized', fontsize=14, pad=12, fontweight='bold')
-    ax.view_init(elev=25, azim=45)
-    ax.grid(True, alpha=0.4, linestyle='--', linewidth=0.8)
-    ax.tick_params(labelsize=10, width=1.0)
-    
     # ========================================================================
-    # Synchronize Axis Limits and Viewing Angle - SAME PLANE
+    # Synchronize Axis Limits and Viewing Angle for Both Subplots
     # ========================================================================
     if len(baseline_coords) > 0 and len(stabilized_coords) > 0:
         all_x = np.concatenate([baseline_coords[:, 0], stabilized_coords[:, 0]])
@@ -1069,18 +1093,19 @@ def figure_11_3d_toolpath_comparison(baseline_lines: List[str], stabilized_lines
         z_range = [np.min(all_z), np.max(all_z)] if len(all_z) > 0 else [0, 10]
         
         # Add padding
-        x_pad = (x_range[1] - x_range[0]) * 0.05 if x_range[1] > x_range[0] else 5
-        y_pad = (y_range[1] - y_range[0]) * 0.05 if y_range[1] > y_range[0] else 5
-        z_pad = (z_range[1] - z_range[0]) * 0.05 if z_range[1] > z_range[0] else 0.5
+        x_pad = (x_range[1] - x_range[0]) * 0.1 if x_range[1] > x_range[0] else 10
+        y_pad = (y_range[1] - y_range[0]) * 0.1 if y_range[1] > y_range[0] else 10
+        z_pad = (z_range[1] - z_range[0]) * 0.1 if z_range[1] > z_range[0] else 1
         
-        # Set axis limits for single plot
+        # Set axis limits for both subplots
         x_min, x_max = x_range[0] - x_pad, x_range[1] + x_pad
         y_min, y_max = y_range[0] - y_pad, y_range[1] + y_pad
         z_min, z_max = max(0, z_range[0] - z_pad), z_range[1] + z_pad
         
-        ax.set_xlim(x_min, x_max)
-        ax.set_ylim(y_min, y_max)
-        ax.set_zlim(z_min, z_max)
+        for ax in [ax1, ax2]:
+            ax.set_xlim(x_min, x_max)
+            ax.set_ylim(y_min, y_max)
+            ax.set_zlim(z_min, z_max)
         
         print(f"View: elev=25, azim=45, limits: X[{x_min:.1f}, {x_max:.1f}], Y[{y_min:.1f}, {y_max:.1f}], Z[{z_min:.1f}, {z_max:.1f}]", flush=True)
     
@@ -1339,9 +1364,13 @@ def figure_12_3d_extrusion_rate_map(baseline_lines: List[str], stabilized_lines:
             y_pad = (y_range[1] - y_range[0]) * 0.1 if y_range[1] > y_range[0] else 10
             z_pad = (z_range[1] - z_range[0]) * 0.1 if z_range[1] > z_range[0] else 1
             
-            ax1.set_xlim([x_range[0] - x_pad, x_range[1] + x_pad])
-            ax1.set_ylim([y_range[0] - y_pad, y_range[1] + y_pad])
-            ax1.set_zlim([z_range[0] - z_pad, z_range[1] + z_pad])
+            # Set same limits for both subplots
+            for ax in [ax1, ax2]:
+                ax.set_xlim([x_range[0] - x_pad, x_range[1] + x_pad])
+                ax.set_ylim([y_range[0] - y_pad, y_range[1] + y_pad])
+                ax.set_zlim([z_range[0] - z_pad, z_range[1] + z_pad])
+            # Also synchronize view angles
+            ax2.view_init(elev=20, azim=45)  # Match ax1
             
             ax2.set_xlim([x_range[0] - x_pad, x_range[1] + x_pad])
             ax2.set_ylim([y_range[0] - y_pad, y_range[1] + y_pad])
