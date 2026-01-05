@@ -211,8 +211,8 @@ def emit_retraction_replacement(cfg: StabilizerConfig, original_line: str,
             out.append(f"G1 E{cfg.micro_prime_e:.3f} F{cfg.micro_prime_feed:.1f} ; micro-prime after travel")
     else:
         # No geometry: just dwell + pure E prime
-    if cfg.micro_prime_e > 0:
-        out.append(f"G1 E{cfg.micro_prime_e:.3f} F{cfg.micro_prime_feed:.1f} ; micro-prime after dwell")
+        if cfg.micro_prime_e > 0:
+            out.append(f"G1 E{cfg.micro_prime_e:.3f} F{cfg.micro_prime_feed:.1f} ; micro-prime after dwell")
     
     return out
 
@@ -573,19 +573,19 @@ class PasteStabilizerV2:
                         
                         # Replace retraction, preserving geometry
                         repl = emit_retraction_replacement(self.cfg, raw, x, y, z, f)
-                out.extend(repl)
+                        out.extend(repl)
                         self.changes.append(f"Suppressed retraction at line {idx+1} (geometry preserved).")
                         
-                # Log the replacement as an event with dt ~ dwell
-                self._log(action="retract_suppressed",
-                          line_in=raw, line_out=" | ".join(repl),
+                        # Log the replacement as an event with dt ~ dwell
+                        self._log(action="retract_suppressed",
+                                  line_in=raw, line_out=" | ".join(repl),
                                   e=e_delta,
-                          dt=self.cfg.retract_dwell_s,
-                          u_raw=None, u_shaped=None, feed_scale=None)
-                # simulate dwell relaxation in estimator:
-                self._pressure_update(0.0, self.cfg.retract_dwell_s)
-                self.t_sim += self.cfg.retract_dwell_s
-                continue
+                                  dt=self.cfg.retract_dwell_s,
+                                  u_raw=None, u_shaped=None, feed_scale=None)
+                        # simulate dwell relaxation in estimator:
+                        self._pressure_update(0.0, self.cfg.retract_dwell_s)
+                        self.t_sim += self.cfg.retract_dwell_s
+                        continue
 
             # For moves with extrusion, apply shaping
             if is_move(code_stripped) and has_extrusion(code_stripped):
@@ -690,7 +690,7 @@ def main():
     stab = PasteStabilizerV2(cfg)
 
     try:
-    in_lines = in_path.read_text(encoding="utf-8", errors="replace").splitlines()
+        in_lines = in_path.read_text(encoding="utf-8", errors="replace").splitlines()
     except Exception as e:
         print(f"ERROR: Failed to read input file: {e}", file=sys.stderr)
         sys.exit(1)
@@ -699,7 +699,7 @@ def main():
         print("WARNING: Input file is empty", file=sys.stderr)
     
     try:
-    out_lines = stab.transform(in_lines)
+        out_lines = stab.transform(in_lines)
     except Exception as e:
         print(f"ERROR: Failed to transform G-code: {e}", file=sys.stderr)
         import traceback
@@ -707,13 +707,13 @@ def main():
         sys.exit(1)
 
     try:
-    out_path.write_text("\n".join(out_lines) + "\n", encoding="utf-8")
+        out_path.write_text("\n".join(out_lines) + "\n", encoding="utf-8")
         log_path.write_text("\n".join(stab.changes) + "\n", encoding="utf-8")
     except Exception as e:
         print(f"ERROR: Failed to write output files: {e}", file=sys.stderr)
         sys.exit(1)
     try:
-    if not args.no_csv:
+        if not args.no_csv:
             write_csv(csv_path, stab.log_rows)
     except Exception as e:
         print(f"WARNING: Failed to write CSV log: {e}", file=sys.stderr)

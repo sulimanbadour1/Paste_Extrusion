@@ -216,32 +216,34 @@ def create_3d_comparison(baseline_lines: List[str], stabilized_lines: List[str],
     if max_rate < 1e-6:
         max_rate = 1.0
     
-    # Create figure with clean, simple styling
+    # Create figure with enhanced styling
     plt.rcParams.update({
-        'font.size': 10,
+        'font.size': 11,
         'font.family': 'serif',
         'font.serif': ['Times', 'Times New Roman', 'DejaVu Serif'],
-        'axes.labelsize': 10,
-        'axes.titlesize': 11,
-        'axes.labelweight': 'normal',
+        'axes.labelsize': 12,
+        'axes.titlesize': 13,
+        'axes.labelweight': 'bold',
         'axes.titleweight': 'bold',
-        'xtick.labelsize': 9,
-        'ytick.labelsize': 9,
-        'legend.fontsize': 9,
+        'xtick.labelsize': 10,
+        'ytick.labelsize': 10,
+        'legend.fontsize': 13,
         'legend.frameon': True,
-        'legend.fancybox': False,
+        'legend.fancybox': True,
         'legend.shadow': False,
-        'legend.framealpha': 1.0,
-        'figure.titlesize': 11,
+        'legend.framealpha': 0.95,
+        'legend.edgecolor': 'black',
+        'legend.facecolor': 'white',
+        'figure.titlesize': 14,
         'figure.titleweight': 'bold',
-        'axes.linewidth': 0.8,
-        'grid.linewidth': 0.5,
-        'grid.alpha': 0.3,
+        'axes.linewidth': 1.2,
+        'grid.linewidth': 0.8,
+        'grid.alpha': 0.4,
     })
     
-    # IEEE Paper Format: Single plot, appropriate size
-    fig = plt.figure(figsize=(3.5, 3.5))
-    # No title - keep it simple
+    # Enhanced figure size for better visibility
+    fig = plt.figure(figsize=(6, 6), facecolor='white')
+    fig.patch.set_facecolor('white')
     
     # ========================================================================
     # SINGLE PLOT - Both Models Overlaid
@@ -297,27 +299,27 @@ def create_3d_comparison(baseline_lines: List[str], stabilized_lines: List[str],
     # ========================================================================
     # Plot baseline travel moves very dim (background context only)
     if baseline_travel_segments:
-        lc_travel_b = Line3DCollection(baseline_travel_segments, colors='#e0e0e0', linewidths=0.2, alpha=0.15, zorder=1)
+        lc_travel_b = Line3DCollection(baseline_travel_segments, colors='#d0d0d0', linewidths=0.3, alpha=0.2, zorder=1)
         ax.add_collection3d(lc_travel_b)
     
-    # Plot baseline extrusions dim (context)
+    # Plot baseline extrusions dim (context) - improved visibility
     if baseline_extrusion_segments:
-        lc_ext_b = Line3DCollection(baseline_extrusion_segments, colors='#aaaaaa', linewidths=0.5, alpha=0.3, zorder=2)
+        lc_ext_b = Line3DCollection(baseline_extrusion_segments, colors='#888888', linewidths=0.8, alpha=0.4, zorder=2)
         ax.add_collection3d(lc_ext_b)
     
-    # Plot baseline retractions - THIS IS THE KEY DIFFERENCE
+    # Plot baseline retractions - THIS IS THE KEY DIFFERENCE - enhanced visibility
     if baseline_retraction_segments:
-        lc_ret_b = Line3DCollection(baseline_retraction_segments, colors='red', linewidths=2.0, linestyles='-', alpha=0.9, zorder=30)
+        lc_ret_b = Line3DCollection(baseline_retraction_segments, colors='#d62728', linewidths=2.5, linestyles='-', alpha=0.95, zorder=30)
         ax.add_collection3d(lc_ret_b)
-        # Mark retraction points clearly
+        # Mark retraction points clearly - bigger markers
         if len(baseline_retraction_coords) > 0:
             ret_coords_array = np.array(baseline_retraction_coords)
             # Sample markers for clarity
-            if len(ret_coords_array) > 300:
-                step = len(ret_coords_array) // 300
+            if len(ret_coords_array) > 400:
+                step = len(ret_coords_array) // 400
                 ret_coords_array = ret_coords_array[::step]
             ax.scatter(ret_coords_array[:, 0], ret_coords_array[:, 1], ret_coords_array[:, 2],
-                       color='red', marker='X', s=40, linewidths=0.8, edgecolors='darkred', zorder=35, alpha=0.9)
+                       color='#d62728', marker='X', s=60, linewidths=1.2, edgecolors='#8b0000', zorder=35, alpha=0.95)
     
     # ========================================================================
     # PLOT STABILIZED MODEL (Highlighted, showing the solution)
@@ -382,34 +384,34 @@ def create_3d_comparison(baseline_lines: List[str], stabilized_lines: List[str],
     
     # Plot stabilized travel moves very dim (background context only)
     if stabilized_travel_segments:
-        lc_travel_s = Line3DCollection(stabilized_travel_segments, colors='#e0e0e0', linewidths=0.2, alpha=0.15, zorder=1)
+        lc_travel_s = Line3DCollection(stabilized_travel_segments, colors='#d0d0d0', linewidths=0.3, alpha=0.2, zorder=1)
         ax.add_collection3d(lc_travel_s)
     
-    # Plot stabilized extrusions dim (context)
+    # Plot stabilized extrusions dim (context) - improved visibility
     if stabilized_extrusion_segments:
-        lc_ext_s = Line3DCollection(stabilized_extrusion_segments, colors='#aaaaaa', linewidths=0.5, alpha=0.3, zorder=2)
+        lc_ext_s = Line3DCollection(stabilized_extrusion_segments, colors='#888888', linewidths=0.8, alpha=0.4, zorder=2)
         ax.add_collection3d(lc_ext_s)
     
-    # Plot micro-primes VERY prominently - THIS IS THE KEY DIFFERENCE
+    # Plot micro-primes VERY prominently - THIS IS THE KEY DIFFERENCE - enhanced visibility
     if stabilized_micro_prime_segments:
-        lc_mp = Line3DCollection(stabilized_micro_prime_segments, colors='lime', linewidths=2.0, alpha=1.0, zorder=40)
+        lc_mp = Line3DCollection(stabilized_micro_prime_segments, colors='#2ca02c', linewidths=2.5, alpha=1.0, zorder=40)
         ax.add_collection3d(lc_mp)
-        # Mark micro-prime points clearly
+        # Mark micro-prime points clearly - bigger markers
         if len(stabilized_micro_prime_coords) > 0:
             mp_coords_array = np.array(stabilized_micro_prime_coords)
             # Sample markers for clarity
-            if len(mp_coords_array) > 300:
-                step = len(mp_coords_array) // 300
+            if len(mp_coords_array) > 400:
+                step = len(mp_coords_array) // 400
                 mp_coords_array = mp_coords_array[::step]
             ax.scatter(mp_coords_array[:, 0], mp_coords_array[:, 1], mp_coords_array[:, 2],
-                       color='lime', marker='o', s=40, linewidths=0.8, edgecolors='darkgreen', zorder=45, alpha=1.0)
+                       color='#2ca02c', marker='o', s=60, linewidths=1.2, edgecolors='#006400', zorder=45, alpha=1.0)
     
     # Plot remaining retractions if any (shouldn't happen)
     if stabilized_remaining_retraction_segments:
-        lc_ret_s = Line3DCollection(stabilized_remaining_retraction_segments, colors='orange', linewidths=2.0, linestyles='--', alpha=1.0, zorder=15)
+        lc_ret_s = Line3DCollection(stabilized_remaining_retraction_segments, colors='#ff7f0e', linewidths=2.5, linestyles='--', alpha=1.0, zorder=15)
         ax.add_collection3d(lc_ret_s)
     
-    # Simple annotation showing both
+    # Enhanced annotation showing both - bigger and more prominent
     annotation_text = f'Baseline: {baseline_retraction_count} retractions (red)\n'
     if remaining_retractions == 0:
         annotation_text += f'Stabilized: {micro_prime_count} micro-primes (green), 0 retractions'
@@ -417,18 +419,19 @@ def create_3d_comparison(baseline_lines: List[str], stabilized_lines: List[str],
         annotation_text += f'Stabilized: {micro_prime_count} micro-primes, {remaining_retractions} retractions'
     
     ax.text2D(0.02, 0.98, annotation_text, 
-              transform=ax.transAxes, fontsize=9, verticalalignment='top',
-              bbox=dict(boxstyle='round,pad=0.4', facecolor='white', alpha=0.95, 
-                       edgecolor='black', linewidth=1.5),
+              transform=ax.transAxes, fontsize=11, verticalalignment='top',
+              bbox=dict(boxstyle='round,pad=0.6', facecolor='white', alpha=0.98, 
+                       edgecolor='black', linewidth=2.0),
               color='black', fontweight='bold')
     
-    ax.set_xlabel('X (mm)', fontsize=9)
-    ax.set_ylabel('Y (mm)', fontsize=9)
-    ax.set_zlabel('Z (mm)', fontsize=9)
-    ax.set_title('3D Toolpath Comparison: Baseline vs Stabilized', fontsize=10, pad=6, fontweight='bold')
+    # Enhanced axis labels and title
+    ax.set_xlabel('X (mm)', fontsize=12, fontweight='bold', labelpad=10)
+    ax.set_ylabel('Y (mm)', fontsize=12, fontweight='bold', labelpad=10)
+    ax.set_zlabel('Z (mm)', fontsize=12, fontweight='bold', labelpad=10)
+    ax.set_title('3D Toolpath Comparison: Baseline vs Stabilized', fontsize=14, pad=12, fontweight='bold')
     ax.view_init(elev=25, azim=45)
-    ax.grid(True, alpha=0.2)
-    ax.tick_params(labelsize=8)
+    ax.grid(True, alpha=0.4, linestyle='--', linewidth=0.8)
+    ax.tick_params(labelsize=10, width=1.0)
     
     # ========================================================================
     # Synchronize Axis Limits and Viewing Angle - SAME PLANE
@@ -459,21 +462,28 @@ def create_3d_comparison(baseline_lines: List[str], stabilized_lines: List[str],
         print(f"View: elev=25, azim=45, limits: X[{x_min:.1f}, {x_max:.1f}], Y[{y_min:.1f}, {y_max:.1f}], Z[{z_min:.1f}, {z_max:.1f}]", flush=True)
     
     # ========================================================================
-    # Simple Legend - Only Show Key Differences
+    # Enhanced Legend - Bigger and More Prominent
     # ========================================================================
     from matplotlib.lines import Line2D
     legend_elements = [
-        Line2D([0], [0], color='red', linewidth=2, label='Retractions'),
-        Line2D([0], [0], color='lime', linewidth=2, label='Micro-primes'),
+        Line2D([0], [0], color='#d62728', linewidth=3, label='Retractions (Baseline)'),
+        Line2D([0], [0], color='#2ca02c', linewidth=3, label='Micro-primes (Stabilized)'),
     ]
-    fig.legend(handles=legend_elements, loc='lower center', ncol=2, fontsize=9, frameon=True, 
-               fancybox=False, shadow=False, framealpha=1.0, bbox_to_anchor=(0.5, 0.02), 
-               columnspacing=2.0, handlelength=2.5)
+    # Make legend much bigger and more prominent
+    legend = fig.legend(handles=legend_elements, loc='lower center', ncol=2, 
+                       fontsize=14, frameon=True, fancybox=True, shadow=False, 
+                       framealpha=0.98, edgecolor='black', facecolor='white',
+                       bbox_to_anchor=(0.5, 0.01), columnspacing=3.0, 
+                       handlelength=4.0, handletextpad=1.0, borderpad=1.2)
+    # Make legend text bold
+    for text in legend.get_texts():
+        text.set_fontweight('bold')
+        text.set_fontsize(14)
     
     # ========================================================================
     # Save or Display
     # ========================================================================
-    plt.tight_layout(rect=[0, 0.05, 1, 0.98])  # Leave space for legend
+    plt.tight_layout(rect=[0, 0.08, 1, 0.98])  # Leave more space for bigger legend
     
     if output_path:
         output_path.parent.mkdir(parents=True, exist_ok=True)
