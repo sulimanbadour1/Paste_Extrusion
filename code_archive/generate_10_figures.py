@@ -1249,20 +1249,25 @@ def figure_12_3d_extrusion_rate_map(baseline_lines: List[str], stabilized_lines:
     
     stabilized_segments = []
     stabilized_colors_seg = []
+    stabilized_travel_segments = []
     micro_prime_count = 0
     
     if len(stabilized_coords) > 1:
-        plot_limit = min(5000, len(stabilized_coords) - 1)
+        # PLOT ALL POINTS - No limit to show complete model (matching 3d_map.py logic)
+        plot_limit_stabilized = len(stabilized_coords) - 1
+        
+        print(f"Processing {plot_limit_stabilized} stabilized moves for extrusion rate map...", flush=True)
         
         # Use E values as primary indicator (more reliable than flags)
-        for i in range(plot_limit):
+        for i in range(plot_limit_stabilized):
             has_e = (i+1 < len(stabilized_e) and abs(stabilized_e[i+1]) > 1e-6)
             is_extrusion_flag = (i+1 < len(stabilized_ext) and stabilized_ext[i+1])
             
+            seg = [[stabilized_coords[i, 0], stabilized_coords[i, 1], stabilized_coords[i, 2]],
+                   [stabilized_coords[i+1, 0], stabilized_coords[i+1, 1], stabilized_coords[i+1, 2]]]
+            
             # Create segment for any move with E value or extrusion flag
-            if has_e and stabilized_e[i+1] > 0:  # Positive E
-                seg = [[stabilized_coords[i, 0], stabilized_coords[i, 1], stabilized_coords[i, 2]],
-                       [stabilized_coords[i+1, 0], stabilized_coords[i+1, 1], stabilized_coords[i+1, 2]]]
+            if has_e and stabilized_e[i+1] > 0:  # Positive E = extrusion
                 stabilized_segments.append(seg)
                 # Use extrusion rate for color
                 if i+1 < len(stabilized_rates) and stabilized_rates[i+1] > 0 and max_rate > 0:
@@ -1271,37 +1276,18 @@ def figure_12_3d_extrusion_rate_map(baseline_lines: List[str], stabilized_lines:
                     stabilized_colors_seg.append(0.7)  # Brighter default
                 # Mark small E as micro-prime
                 if abs(stabilized_e[i+1]) < 1.0:
-                    if micro_prime_count < 100:
-                        ax2.scatter([stabilized_coords[i+1, 0]], [stabilized_coords[i+1, 1]], [stabilized_coords[i+1, 2]],
-                                   color='lime', marker='o', s=80, edgecolors='darkgreen', linewidths=1.5, zorder=15, alpha=0.8)
                     micro_prime_count += 1
             elif is_extrusion_flag:  # Fallback to flag
-                seg = [[stabilized_coords[i, 0], stabilized_coords[i, 1], stabilized_coords[i, 2]],
-                       [stabilized_coords[i+1, 0], stabilized_coords[i+1, 1], stabilized_coords[i+1, 2]]]
                 stabilized_segments.append(seg)
                 if i+1 < len(stabilized_rates) and stabilized_rates[i+1] > 0 and max_rate > 0:
                     stabilized_colors_seg.append(stabilized_rates[i+1] / max_rate)
                 else:
                     stabilized_colors_seg.append(0.7)
             else:
-                # Travel move - plot directly
-                ax2.plot([stabilized_coords[i, 0], stabilized_coords[i+1, 0]],
-                        [stabilized_coords[i, 1], stabilized_coords[i+1, 1]],
-                        [stabilized_coords[i, 2], stabilized_coords[i+1, 2]],
-                        color='lightblue', linewidth=1.0, alpha=0.7, zorder=1)
+                # Travel move - collect for batch plotting
+                stabilized_travel_segments.append(seg)
         
-        # Force create segments if empty
-        if len(stabilized_segments) == 0:
-            print("WARNING: No stabilized segments found in Figure 12, creating segments from all moves", flush=True)
-            for i in range(plot_limit):
-                seg = [[stabilized_coords[i, 0], stabilized_coords[i, 1], stabilized_coords[i, 2]],
-                       [stabilized_coords[i+1, 0], stabilized_coords[i+1, 1], stabilized_coords[i+1, 2]]]
-                stabilized_segments.append(seg)
-                # Use E value to determine color
-                if i+1 < len(stabilized_e) and abs(stabilized_e[i+1]) > 1e-6:
-                    stabilized_colors_seg.append(0.7)  # Has E - brighter
-                else:
-                    stabilized_colors_seg.append(0.3)  # Travel - dimmer
+        print(f"Collected {len(stabilized_segments)} extrusion segments, {len(stabilized_travel_segments)} travel segments", flush=True)
     
     # Plot stabilized segments
     if stabilized_segments:

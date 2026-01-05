@@ -847,26 +847,61 @@ def figure_9_3d_toolpath_comparison(baseline_lines: List[str], stabilized_lines:
                 ax1.scatter([baseline_coords[i+1, 0]], [baseline_coords[i+1, 1]], [baseline_coords[i+1, 2]],
                            color='red', marker='X', s=150, linewidths=2.0, edgecolors='darkred', zorder=10)
     
-    ax1.set_title('Baseline', fontsize=13, fontweight='bold', pad=15)
+    ax1.set_title('(a) Baseline', fontsize=13, fontweight='bold', pad=15)
     ax1.set_xlabel('X (mm)', fontsize=11, fontweight='bold')
     ax1.set_ylabel('Y (mm)', fontsize=11, fontweight='bold')
     ax1.set_zlabel('Z (mm)', fontsize=11, fontweight='bold')
+    ax1.view_init(elev=25, azim=45)
+    ax1.grid(True, alpha=0.4, linestyle='--', linewidth=0.8)
+    ax1.tick_params(labelsize=10)
     
     # Stabilized
     ax2 = fig.add_subplot(122, projection='3d')
     
+    # Track micro-primes for stabilized
+    micro_prime_count = 0
     if len(stabilized_coords) > 1:
         for i in range(len(stabilized_coords) - 1):
-            if stabilized_ext[i+1]:
+            has_e = (i+1 < len(stabilized_e) and abs(stabilized_e[i+1]) > 1e-6)
+            if stabilized_ext[i+1] or (has_e and stabilized_e[i+1] > 0):
                 ax2.plot([stabilized_coords[i, 0], stabilized_coords[i+1, 0]],
                         [stabilized_coords[i, 1], stabilized_coords[i+1, 1]],
                         [stabilized_coords[i, 2], stabilized_coords[i+1, 2]],
                         color=COLORS['stabilized'], alpha=0.7, linewidth=1.0)
+                # Mark small E as micro-prime
+                if has_e and abs(stabilized_e[i+1]) < 1.0:
+                    if micro_prime_count < 100:
+                        ax2.scatter([stabilized_coords[i+1, 0]], [stabilized_coords[i+1, 1]], [stabilized_coords[i+1, 2]],
+                                   color='#2ca02c', marker='o', s=60, edgecolors='#006400', linewidths=1.2, zorder=10, alpha=1.0)
+                    micro_prime_count += 1
     
-    ax2.set_title('Stabilized', fontsize=13, fontweight='bold', pad=15)
+    ax2.set_title('(b) Stabilized', fontsize=13, fontweight='bold', pad=15)
     ax2.set_xlabel('X (mm)', fontsize=11, fontweight='bold')
     ax2.set_ylabel('Y (mm)', fontsize=11, fontweight='bold')
     ax2.set_zlabel('Z (mm)', fontsize=11, fontweight='bold')
+    ax2.view_init(elev=25, azim=45)
+    ax2.grid(True, alpha=0.4, linestyle='--', linewidth=0.8)
+    ax2.tick_params(labelsize=10)
+    
+    # Synchronize axis limits for both subplots
+    if len(baseline_coords) > 0 and len(stabilized_coords) > 0:
+        all_x = np.concatenate([baseline_coords[:, 0], stabilized_coords[:, 0]])
+        all_y = np.concatenate([baseline_coords[:, 1], stabilized_coords[:, 1]])
+        all_z = np.concatenate([baseline_coords[:, 2], stabilized_coords[:, 2]])
+        
+        if len(all_x) > 0 and len(all_y) > 0 and len(all_z) > 0:
+            x_range = [np.min(all_x), np.max(all_x)]
+            y_range = [np.min(all_y), np.max(all_y)]
+            z_range = [np.min(all_z), np.max(all_z)]
+            
+            x_pad = (x_range[1] - x_range[0]) * 0.1 if x_range[1] > x_range[0] else 10
+            y_pad = (y_range[1] - y_range[0]) * 0.1 if y_range[1] > y_range[0] else 10
+            z_pad = (z_range[1] - z_range[0]) * 0.1 if z_range[1] > z_range[0] else 1
+            
+            for ax in [ax1, ax2]:
+                ax.set_xlim([x_range[0] - x_pad, x_range[1] + x_pad])
+                ax.set_ylim([y_range[0] - y_pad, y_range[1] + y_pad])
+                ax.set_zlim([z_range[0] - z_pad, z_range[1] + z_pad])
     
     # Add legend
     baseline_ret_count = baseline_ret.sum()
