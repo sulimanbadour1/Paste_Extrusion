@@ -71,6 +71,7 @@ troxny_files/*.stl
 !code_archive/test.gcode
 !troxny_files/test.gcode
 
+
 # Temporary files
 *.tmp
 *.bak
