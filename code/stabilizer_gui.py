@@ -27,6 +27,12 @@ class StabilizerGUI:
         self.csv_file = tk.StringVar(value="results/run_log.csv")
         self.log_file = tk.StringVar(value="results/changes.log")
         
+        # Input data files for figures
+        self.print_trials_file = tk.StringVar(value="input/print_trials.csv")
+        self.electrical_traces_file = tk.StringVar(value="input/electrical_traces.csv")
+        self.first_layer_file = tk.StringVar(value="input/first_layer_sweep.csv")
+        self.data_dir = tk.StringVar(value="input")  # Data directory path
+        
         # Create notebook for tabs
         self.notebook = ttk.Notebook(root)
         self.notebook.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
@@ -233,6 +239,40 @@ class StabilizerGUI:
                         justify=tk.CENTER)
         desc.pack(pady=5)
         
+        # Input data files selection
+        input_files_frame = ttk.LabelFrame(frame, text="Input Data Files", padding=10)
+        input_files_frame.pack(fill=tk.X, padx=20, pady=10)
+        
+        # Print trials CSV
+        ttk.Label(input_files_frame, text="Print Trials CSV:").grid(row=0, column=0, sticky=tk.W, pady=2)
+        print_trials_entry = ttk.Entry(input_files_frame, textvariable=self.print_trials_file, width=50)
+        print_trials_entry.grid(row=0, column=1, padx=5, pady=2, sticky=tk.EW)
+        ttk.Button(input_files_frame, text="Browse...", 
+                  command=lambda: self.browse_file(self.print_trials_file, "Select Print Trials CSV", [("CSV files", "*.csv"), ("All files", "*.*")])).grid(row=0, column=2, padx=5, pady=2)
+        
+        # Electrical traces CSV
+        ttk.Label(input_files_frame, text="Electrical Traces CSV:").grid(row=1, column=0, sticky=tk.W, pady=2)
+        electrical_entry = ttk.Entry(input_files_frame, textvariable=self.electrical_traces_file, width=50)
+        electrical_entry.grid(row=1, column=1, padx=5, pady=2, sticky=tk.EW)
+        ttk.Button(input_files_frame, text="Browse...", 
+                  command=lambda: self.browse_file(self.electrical_traces_file, "Select Electrical Traces CSV", [("CSV files", "*.csv"), ("All files", "*.*")])).grid(row=1, column=2, padx=5, pady=2)
+        
+        # First layer sweep CSV (optional)
+        ttk.Label(input_files_frame, text="First Layer Sweep CSV (optional):").grid(row=2, column=0, sticky=tk.W, pady=2)
+        first_layer_entry = ttk.Entry(input_files_frame, textvariable=self.first_layer_file, width=50)
+        first_layer_entry.grid(row=2, column=1, padx=5, pady=2, sticky=tk.EW)
+        ttk.Button(input_files_frame, text="Browse...", 
+                  command=lambda: self.browse_file(self.first_layer_file, "Select First Layer Sweep CSV", [("CSV files", "*.csv"), ("All files", "*.*")])).grid(row=2, column=2, padx=5, pady=2)
+        
+        # Data directory (alternative to individual files)
+        ttk.Label(input_files_frame, text="Data Directory (or use files above):").grid(row=3, column=0, sticky=tk.W, pady=2)
+        data_dir_entry = ttk.Entry(input_files_frame, textvariable=self.data_dir, width=50)
+        data_dir_entry.grid(row=3, column=1, padx=5, pady=2, sticky=tk.EW)
+        ttk.Button(input_files_frame, text="Browse...", 
+                  command=lambda: self.browse_directory(self.data_dir)).grid(row=3, column=2, padx=5, pady=2)
+        
+        input_files_frame.columnconfigure(1, weight=1)
+        
         # Plot options
         options_frame = ttk.LabelFrame(frame, text="Figure Sets", padding=10)
         options_frame.pack(fill=tk.X, padx=20, pady=10)
@@ -299,6 +339,16 @@ class StabilizerGUI:
                              "Figures are displayed interactively - save them manually using figure window controls.",
                         justify=tk.CENTER)
         desc.pack(pady=5)
+        
+        # Input data files selection (shared with Research Plots tab)
+        input_files_frame = ttk.LabelFrame(frame, text="Input Data Files (Optional - uses same as Research Plots tab)", padding=10)
+        input_files_frame.pack(fill=tk.X, padx=20, pady=10)
+        
+        info_label = ttk.Label(input_files_frame, 
+                              text="Input files are configured in the 'Research Plots' tab.\n"
+                                   "The data directory or individual CSV files can be set there.",
+                              justify=tk.LEFT, font=("Arial", 9))
+        info_label.pack(anchor=tk.W, pady=5)
         
         # Figure selection
         selection_frame = ttk.LabelFrame(frame, text="Select Figures to Generate", padding=10)
@@ -433,6 +483,33 @@ For more information, see readme.md
         )
         if filename:
             self.input_file.set(filename)
+    
+    def browse_file(self, var, title, filetypes):
+        """Browse for a file and set the variable."""
+        filename = filedialog.askopenfilename(
+            title=title,
+            filetypes=filetypes
+        )
+        if filename:
+            # Convert to relative path if in code directory
+            code_dir = Path(__file__).parent
+            try:
+                rel_path = Path(filename).relative_to(code_dir)
+                var.set(str(rel_path))
+            except ValueError:
+                var.set(filename)
+    
+    def browse_directory(self, var):
+        """Browse for a directory and set the variable."""
+        dirname = filedialog.askdirectory(title="Select Data Directory")
+        if dirname:
+            # Convert to relative path if in code directory
+            code_dir = Path(__file__).parent
+            try:
+                rel_path = Path(dirname).relative_to(code_dir)
+                var.set(str(rel_path))
+            except ValueError:
+                var.set(dirname)
     
     def run_stabilizer(self):
         """Run the stabilizer script."""
@@ -682,20 +759,27 @@ For more information, see readme.md
             if not baseline_path.exists() and baseline_gcode == "test.gcode":
                 baseline_path = code_dir / "test_gcode" / "test.gcode"
             stabilized_path = code_dir / stabilized_gcode
-            print_trials = Path(__file__).parent.parent / "print_trials.csv"
+            
+            # Get data directory from GUI
+            data_dir_path = code_dir / self.data_dir.get() if self.data_dir.get() else code_dir / "input"
+            if not data_dir_path.exists():
+                data_dir_path = code_dir / "data"  # Fallback
+            
+            print_trials = data_dir_path / "print_trials.csv"
             
             if not print_trials.exists():
                 self.research_log.insert(tk.END, f"ERROR: print_trials.csv not found at {print_trials}\n")
                 self.research_log.insert(tk.END, "Figures 4-7 require experimental data from print_trials.csv\n")
                 messagebox.showerror("Error", f"print_trials.csv not found at {print_trials}\n\n"
-                                            "Figures 4-7 require experimental data.")
+                                            "Figures 4-7 require experimental data.\n"
+                                            "Please set the data directory or file path in the Input Data Files section.")
                 return
             
             cmd = [
-                sys.executable, "generate_paper_figures.py",
+                sys.executable, "generate_10_figures.py",
                 "--baseline-gcode", str(baseline_path),
                 "--stabilized-gcode", str(stabilized_path),
-                "--print-trials", str(print_trials),
+                "--data-dir", str(data_dir_path),
                 "--figures", "4", "5", "6", "7"
             ]
             
@@ -733,7 +817,13 @@ For more information, see readme.md
         baseline_gcode = self.verify_input.get() or self.viz_original.get() or "test.gcode"
         stabilized_gcode = self.verify_output.get() or self.viz_stabilized.get() or "results/stabilized.gcode"
         stabilized_csv = self.verify_csv.get() or self.csv_file.get() or "results/run_log.csv"
-        print_trials = Path(__file__).parent.parent / "print_trials.csv"
+        
+        # Get data directory from GUI
+        code_dir = Path(__file__).parent
+        data_dir_path = code_dir / self.data_dir.get() if self.data_dir.get() else code_dir / "input"
+        if not data_dir_path.exists():
+            data_dir_path = code_dir / "data"  # Fallback
+        print_trials = data_dir_path / "print_trials.csv"
         
         if self.plot_basic.get():
             self.research_log.insert(tk.END, "=== Generating Basic Research Plots (Figures 1-3) ===\n")
@@ -753,12 +843,17 @@ For more information, see readme.md
                     self.research_log.insert(tk.END, f"ERROR: Stabilized G-code not found: {stabilized_gcode}\n")
                     errors.append("Basic plots")
                 else:
+                    # Get data directory from GUI
+                    data_dir_path = code_dir / self.data_dir.get() if self.data_dir.get() else code_dir / "input"
+                    if not data_dir_path.exists():
+                        data_dir_path = code_dir / "data"  # Fallback
+                    
                     # Build command - only include CSV if file exists
                     cmd = [
                         sys.executable, "generate_10_figures.py",
                         "--baseline-gcode", str(baseline_path),
                         "--stabilized-gcode", str(stabilized_path),
-                        "--data-dir", str(code_dir / "data"),
+                        "--data-dir", str(data_dir_path),
                         "--figures", "1", "2", "3"
                     ]
                     
@@ -785,11 +880,16 @@ For more information, see readme.md
                     self.research_log.insert(tk.END, "Figures 4-7 require experimental data.\n")
                     errors.append("Advanced plots")
                 else:
+                    # Get data directory from GUI
+                    data_dir_path = code_dir / self.data_dir.get() if self.data_dir.get() else code_dir / "input"
+                    if not data_dir_path.exists():
+                        data_dir_path = code_dir / "data"  # Fallback
+                    
                     cmd = [
                         sys.executable, "generate_10_figures.py",
                         "--baseline-gcode", str(baseline_path),
                         "--stabilized-gcode", str(stabilized_path),
-                        "--data-dir", str(code_dir / "data"),
+                        "--data-dir", str(data_dir_path),
                         "--figures", "4", "5", "6", "7"
                     ]
                     
@@ -860,12 +960,17 @@ For more information, see readme.md
                 messagebox.showwarning("No Selection", "Please select at least one figure to generate.")
                 return
             
+            # Get data directory from GUI
+            data_dir_path = code_dir / self.data_dir.get() if self.data_dir.get() else code_dir / "input"
+            if not data_dir_path.exists():
+                data_dir_path = code_dir / "data"  # Fallback
+            
             # Build command
             cmd = [
                 sys.executable, "generate_10_figures.py",
                 "--baseline-gcode", str(baseline_path),
                 "--stabilized-gcode", str(stabilized_path),
-                "--data-dir", str(code_dir / "data"),
+                "--data-dir", str(data_dir_path),
                 "--figures"
             ] + selected_figures
             

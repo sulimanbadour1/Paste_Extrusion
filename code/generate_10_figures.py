@@ -2653,11 +2653,17 @@ def main():
     if not stabilized_path.exists():
         raise FileNotFoundError(f"Stabilized G-code not found: {args.stabilized_gcode} (tried: {stabilized_path})")
     
-    # Data directory defaults to code/data
+    # Data directory defaults to code/input, falls back to code/data
     if args.data_dir:
         data_dir = Path(args.data_dir)
     else:
-        data_dir = script_dir / 'data'
+        # Try input folder first, then fall back to data folder
+        input_dir = script_dir / 'input'
+        data_dir_fallback = script_dir / 'data'
+        if input_dir.exists():
+            data_dir = input_dir
+        else:
+            data_dir = data_dir_fallback
     
     # Read G-code files
     print(f"Reading baseline G-code: {baseline_path}", flush=True)
@@ -2670,7 +2676,7 @@ def main():
     
     print(f"Loaded {len(baseline_lines)} baseline lines, {len(stabilized_lines)} stabilized lines", flush=True)
     
-    # Read CSV data files
+    # Read CSV data files from input folder
     print_trials_path = data_dir / 'print_trials.csv'
     first_layer_path = data_dir / 'first_layer_sweep.csv'
     electrical_path = data_dir / 'electrical_traces.csv'
