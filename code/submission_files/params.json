@@ -1,0 +1,14 @@
+{
+  "p_y": 5.0,
+  "p_max": 14.0,
+  "tau_r": 6.0,
+  "alpha": 8.0,
+  "delta_u_max": 0.35,
+  "s_u": 1.0,
+  "delta_t_min": 0.02,
+  "Ts": 0.1,
+  "relax_dwell_s": 0.3,
+  "lowprime_e": 0.6,
+  "feed_scale_min": 0.5,
+  "feed_scale_max": 1.5
+}
