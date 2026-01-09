@@ -3,6 +3,57 @@
 This project implements the software layer described in the paper:
 **Software-Defined Pressure and Flow Stabilization of Low-Cost Paste Extrusion 3D Printers for Structural and Electrical Printing**
 
+## Project Overview
+
+This codebase provides a **software middleware solution** that transforms standard FDM slicer G-code into paste-extrusion-compatible G-code. The system addresses the fundamental challenge that paste materials (conductive inks, structural pastes, biomaterials) behave differently from thermoplastic filaments—they exhibit yield-stress flow, pressure accumulation, and delayed response to extrusion commands.
+
+### What This Code Does
+
+The project consists of several Python modules that work together:
+
+1. **`paste_stabilizer_v2.py`** - Core stabilization engine
+   - Reads input G-code from standard slicers (Cura, PrusaSlicer, etc.)
+   - Suppresses retractions (negative E moves) that collapse paste pressure
+   - Replaces retractions with pressure-stabilizing dwells and micro-primes
+   - Maintains internal pressure estimate (`p_hat`) using a first-order model
+   - Actively shapes extrusion commands to keep pressure in a safe window
+   - Preserves XY/Z geometry when suppressing retractions
+   - Outputs stabilized G-code ready for paste printing
+
+2. **`verify_stabilizer.py`** - Quality assurance and verification
+   - Validates that stabilization worked correctly
+   - Checks for retraction removal, pressure compliance, shaping evidence
+   - Generates verification plots and 3D toolpath visualizations
+   - Provides statistical analysis of pressure traces
+
+3. **`generate_10_figures.py`** - Paper figure generation
+   - Generates 23 publication-ready figures for research papers
+   - Includes G-code analysis, survival curves, electrical yield plots
+   - Uses experimental data from CSV files (print trials, electrical traces)
+   - IEEE-compatible formatting with bold text and professional styling
+
+4. **`stabilizer_gui.py`** - Graphical user interface
+   - User-friendly GUI for the entire workflow
+   - Tabs for stabilization, verification, visualization, and figure generation
+   - File selection and data directory management
+   - Interactive figure display and export
+
+5. **`generate_comparison_plots.py`** - Comparison and analysis
+   - Side-by-side comparison of original vs stabilized G-code
+   - 3D toolpath visualization
+   - Extrusion statistics and effectiveness metrics
+
+### Key Innovation
+
+Unlike hardware-based solutions (pressure sensors, closed-loop control), this approach requires **zero hardware modifications**. It works entirely through G-code transformation, making it applicable to any 3D printer that accepts standard G-code commands.
+
+### Use Cases
+
+- **Conductive paste printing** - Silver/carbon paste for electronics
+- **Structural paste printing** - Cement, clay, ceramic pastes
+- **Biomaterial printing** - Hydrogels, bioinks
+- **Research applications** - Reproducible paste extrusion experiments
+
 The goal is to make a low-cost paste extrusion printer usable and repeatable *without hardware modifications* by transforming slicer-generated G-code into paste-stable G-code.
 
 ---
@@ -42,38 +93,65 @@ This stabilizer converts that into paste-aware execution by:
 ### Project Structure
 ```
 code/
-├── paste_stabilizer_v2.py    # Main stabilizer
+├── paste_stabilizer_v2.py    # Main stabilizer engine
 ├── verify_stabilizer.py      # Verification and QA tool
-├── compare_gcode.py          # Comparison and analysis tool
-├── plot_phat.py              # Paper figure generator
-├── test.gcode                 # Example input G-code
-├── results/                   # Output directory (created automatically)
+├── generate_10_figures.py    # Paper figure generator (23 figures)
+├── generate_comparison_plots.py  # Comparison and analysis tool
+├── stabilizer_gui.py         # Graphical user interface
+├── paper_figs.py             # Alternative figure generator
+├── plot_ut_phat_combined.py  # Combined u(t) and p̂(t) plots
+├── 3d_map.py                 # 3D toolpath visualization
+├── test.gcode                # Example input G-code
+├── input/                    # Input data files directory
+│   ├── print_trials.csv      # Print trial experimental data
+│   ├── electrical_traces.csv # Electrical measurement data
+│   ├── first_layer_sweep.csv # First-layer operating envelope data (optional)
+│   └── README.md             # Input files documentation
+├── results/                  # Output directory (created automatically)
 │   ├── stabilized.gcode      # Stabilized output
-│   ├── run_log.csv           # Pressure and action log
-│   ├── changes.log           # Change log
-│   └── figures/              # Generated plots
+│   ├── run_log.csv          # Pressure and action log
+│   ├── changes.log          # Change log
+│   └── figures/             # Generated plots
 │       ├── comparison_*.png  # Comparison plots
 │       └── verification_*.png # Verification plots
-└── readme.md                  # This file
+└── readme.md                 # This file
 ```
 
-### Main middleware
+### Main Components
+
+**Core Stabilization Engine**
 - `paste_stabilizer_v2.py`  
   Reads input G-code, writes stabilized G-code, produces logs.
   - **Key feature**: Preserves XY/Z geometry when suppressing retractions
+  - Implements pressure estimation model (`p_hat`)
+  - Active command shaping (feed scaling, dwell insertion, priming)
 
-### Verification and QA
+**Verification and QA**
 - `verify_stabilizer.py`  
   Checks that the stabilized output meets expected invariants:
-  - header inserted
-  - retractions removed
-  - modes set correctly (G90/M83)
-  - shaping occurred (feed scaling or pressure actions present)
-  - logs exist and contain plausible values
+  - Header inserted
+  - Retractions removed
+  - Modes set correctly (G90/M83)
+  - Shaping occurred (feed scaling or pressure actions present)
+  - Logs exist and contain plausible values
   - **Enhanced with 3D toolpath visualization and comprehensive plots**
 
-### Comparison and Analysis Tools
-- `compare_gcode.py`  
+**Figure Generation**
+- `generate_10_figures.py`  
+  Generates 23 publication-ready figures for research papers:
+  - G-code analysis (delta, retractions, timelines)
+  - Pressure estimates with bounds
+  - Survival curves (extrusion continuity)
+  - Operating envelopes and yield maps
+  - Electrical trace analysis
+  - Width uniformity plots
+  - IEEE-compatible formatting with bold text
+
+- `paper_figs.py`  
+  Alternative figure generator with different styling options
+
+**Comparison and Analysis**
+- `generate_comparison_plots.py`  
   Comprehensive visual comparison tool between original and stabilized G-code:
   - Side-by-side 3D toolpath visualization
   - Retraction vs micro-prime analysis
@@ -82,11 +160,23 @@ code/
   - Effectiveness metrics summary
   - Extrusion statistics and continuity analysis
 
-### Plotting (optional)
-- `plot_phat.py`  
-  Produces `figures/phat_trace.pdf` for the paper.
-  - Reads data from `results/run_log.csv`
-  - Saves plots to `results/figures/`
+**User Interface**
+- `stabilizer_gui.py`  
+  Graphical user interface for the entire workflow:
+  - Tab 1: G-code stabilization
+  - Tab 2: Verification
+  - Tab 3: 3D visualization
+  - Tab 4: Research plots generation
+  - Tab 5: Paper figures (23 figures)
+  - Tab 6: Help and documentation
+  - Input file selection for CSV data files
+  - Interactive figure display
+
+**Visualization Tools**
+- `3d_map.py`  
+  3D toolpath visualization and mapping
+- `plot_ut_phat_combined.py`  
+  Combined extrusion rate u(t) and pressure p̂(t) plots
 
 ---
 
