@@ -744,17 +744,16 @@ def figure_7_survival_curve(print_trials_df: pd.DataFrame):
     print("[OK] Displayed: Figure 7 — Extrusion Continuity Survival Curve (IEEE Enhanced)")
 
 
-def figure_8_first_layer_map(first_layer_df: pd.DataFrame, 
-                             save_mode: bool = False, 
-                             output_dir: Optional[Path] = None):
+def figure_8_first_layer_map(first_layer_df: pd.DataFrame):
     """
     Fig. 8 — First-layer operating envelope heatmap
     x: h_ratio = h1/d_nozzle, y: speed_mmps, cell value: mean success
-    Enhanced with IEEE-compatible styling and save capability.
     """
     if not all(col in first_layer_df.columns for col in ['h_ratio', 'speed_mmps', 'success']):
         print("ERROR: first_layer_sweep.csv must contain columns: h_ratio, speed_mmps, success")
         return
+    
+    fig, ax = plt.subplots(figsize=(3.5, 2.5))
     
     # Create pivot table for heatmap
     pivot = first_layer_df.pivot_table(
@@ -764,63 +763,32 @@ def figure_8_first_layer_map(first_layer_df: pd.DataFrame,
         aggfunc='mean'
     )
     
-    # Sort indices for proper display
-    pivot = pivot.sort_index(axis=0)  # Sort h_ratio
-    pivot = pivot.sort_index(axis=1)  # Sort speed
-    
-    # IEEE-compatible figure size (0.8\linewidth ≈ 2.8 inches width)
-    fig, ax = plt.subplots(figsize=(2.8, 2.1))
-    fig.patch.set_facecolor('white')
-    
-    # Create heatmap with RdYlGn colormap (red-yellow-green)
-    im = ax.imshow(pivot.values, cmap='RdYlGn', aspect='auto', vmin=0, vmax=1, 
-                   origin='lower', interpolation='bilinear')
+    im = ax.imshow(pivot.values, cmap='RdYlGn', aspect='auto', vmin=0, vmax=1, origin='lower', 
+                   interpolation='nearest')
     
     # Set ticks with better formatting
-    n_speeds = len(pivot.columns)
-    n_heights = len(pivot.index)
+    ax.set_xticks(np.arange(len(pivot.columns)))
+    ax.set_xticklabels([f'{int(c)}' for c in pivot.columns], fontsize=10)
+    ax.set_yticks(np.arange(len(pivot.index)))
+    ax.set_yticklabels([f'{c:.1f}' for c in pivot.index], fontsize=10)
     
-    ax.set_xticks(np.arange(n_speeds))
-    ax.set_xticklabels([f'{int(c)}' for c in pivot.columns], 
-                       fontsize=10, fontweight='bold', fontfamily='serif')
-    ax.set_yticks(np.arange(n_heights))
-    ax.set_yticklabels([f'{c:.2f}' for c in pivot.index], 
-                       fontsize=10, fontweight='bold', fontfamily='serif')
-    
-    # Labels with proper LaTeX formatting
-    ax.set_xlabel('Speed (mm/s)', fontsize=12, fontweight='bold', fontfamily='serif')
-    ax.set_ylabel(r'$h_1/d_n$', fontsize=12, fontweight='bold', fontfamily='serif')
+    ax.set_xlabel('Speed (mm/s)')
+    ax.set_ylabel('h₁/d_nozzle')
     
     # Add colorbar with better styling
-    cbar = plt.colorbar(im, ax=ax, pad=0.02, aspect=20)
-    cbar.set_label('Success Rate', fontsize=11, fontweight='bold', fontfamily='serif')
+    cbar = plt.colorbar(im, ax=ax, pad=0.02)
+    cbar.set_label('Success Rate', fontsize=10)
     cbar.ax.tick_params(labelsize=9)
-    for label in cbar.ax.get_yticklabels():
-        label.set_fontweight('bold')
-        label.set_fontfamily('serif')
     
     # Add grid lines for better readability
-    ax.set_xticks(np.arange(n_speeds + 1) - 0.5, minor=True)
-    ax.set_yticks(np.arange(n_heights + 1) - 0.5, minor=True)
-    ax.grid(which='minor', color='white', linestyle='-', linewidth=0.8, alpha=0.8)
-    ax.set_axisbelow(False)
-    
-    # Bold axis spines
-    for spine in ax.spines.values():
-        spine.set_linewidth(1.2)
+    ax.set_xticks(np.arange(len(pivot.columns)+1)-0.5, minor=True)
+    ax.set_yticks(np.arange(len(pivot.index)+1)-0.5, minor=True)
+    ax.grid(which='minor', color='white', linestyle='-', linewidth=0.8)
+    ax.tick_params(labelsize=10)
     
     plt.tight_layout()
-    
-    # Save or display
-    if save_mode and output_dir:
-        output_path = output_dir / 'first_layer_operating_envelope.png'
-        output_dir.mkdir(parents=True, exist_ok=True)
-        fig.savefig(output_path, dpi=300, bbox_inches='tight', facecolor='white', edgecolor='none')
-        print(f"[OK] Saved: {output_path}", flush=True)
-        plt.close(fig)
-    else:
-        plt.show(block=True)
-        print("[OK] Displayed: Figure 8 — First-Layer Operating Envelope")
+    plt.show(block=True)
+    print("[OK] Displayed: Figure 8 — First-Layer Operating Envelope")
 
 
 def figure_9_open_circuit_rate(electrical_df: pd.DataFrame):
@@ -2880,11 +2848,7 @@ def main():
     if '8' in figures_to_generate:
         if first_layer_df is not None:
             print("Generating Figure 8...", flush=True)
-            # Determine output directory
-            output_dir = None
-            if hasattr(args, 'save') and args.save:
-                output_dir = Path(args.output_dir) if hasattr(args, 'output_dir') and args.output_dir else Path('results/figures')
-            figure_8_first_layer_map(first_layer_df, save_mode=(output_dir is not None), output_dir=output_dir)
+            figure_8_first_layer_map(first_layer_df)
         else:
             print("⚠ Skipping Figure 8: first_layer_sweep.csv not found", flush=True)
     
