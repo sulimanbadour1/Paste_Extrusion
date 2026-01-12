@@ -379,7 +379,8 @@ class StabilizerGUI:
             '20': 'Fig. 20 — Peak Pressure vs Failure Probability',
             '21': 'Fig. 21 — Extrusion Width Uniformity',
             '22': 'Fig. 22 — Energy / Motor Load Proxy',
-            '23': 'Fig. 23 — Time-Lapse Frame with Flow Annotation'
+            '23': 'Fig. 23 — Time-Lapse Frame with Flow Annotation',
+            '24': 'Fig. 24 — Time-to-Failure Summary Statistics'
         }
         
         # Three columns of checkboxes

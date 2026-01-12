@@ -744,16 +744,17 @@ def figure_7_survival_curve(print_trials_df: pd.DataFrame):
     print("[OK] Displayed: Figure 7 — Extrusion Continuity Survival Curve (IEEE Enhanced)")
 
 
-def figure_8_first_layer_map(first_layer_df: pd.DataFrame):
+def figure_8_first_layer_map(first_layer_df: pd.DataFrame, 
+                             save_mode: bool = False, 
+                             output_dir: Optional[Path] = None):
     """
     Fig. 8 — First-layer operating envelope heatmap
     x: h_ratio = h1/d_nozzle, y: speed_mmps, cell value: mean success
+    Enhanced with IEEE-compatible styling and save capability.
     """
     if not all(col in first_layer_df.columns for col in ['h_ratio', 'speed_mmps', 'success']):
         print("ERROR: first_layer_sweep.csv must contain columns: h_ratio, speed_mmps, success")
         return
-    
-    fig, ax = plt.subplots(figsize=(3.5, 2.5))
     
     # Create pivot table for heatmap
     pivot = first_layer_df.pivot_table(
@@ -763,32 +764,63 @@ def figure_8_first_layer_map(first_layer_df: pd.DataFrame):
         aggfunc='mean'
     )
     
-    im = ax.imshow(pivot.values, cmap='RdYlGn', aspect='auto', vmin=0, vmax=1, origin='lower', 
-                   interpolation='nearest')
+    # Sort indices for proper display
+    pivot = pivot.sort_index(axis=0)  # Sort h_ratio
+    pivot = pivot.sort_index(axis=1)  # Sort speed
+    
+    # IEEE-compatible figure size (0.8\linewidth ≈ 2.8 inches width)
+    fig, ax = plt.subplots(figsize=(2.8, 2.1))
+    fig.patch.set_facecolor('white')
+    
+    # Create heatmap with RdYlGn colormap (red-yellow-green)
+    im = ax.imshow(pivot.values, cmap='RdYlGn', aspect='auto', vmin=0, vmax=1, 
+                   origin='lower', interpolation='bilinear')
     
     # Set ticks with better formatting
-    ax.set_xticks(np.arange(len(pivot.columns)))
-    ax.set_xticklabels([f'{int(c)}' for c in pivot.columns], fontsize=10)
-    ax.set_yticks(np.arange(len(pivot.index)))
-    ax.set_yticklabels([f'{c:.1f}' for c in pivot.index], fontsize=10)
+    n_speeds = len(pivot.columns)
+    n_heights = len(pivot.index)
     
-    ax.set_xlabel('Speed (mm/s)')
-    ax.set_ylabel('h₁/d_nozzle')
+    ax.set_xticks(np.arange(n_speeds))
+    ax.set_xticklabels([f'{int(c)}' for c in pivot.columns], 
+                       fontsize=10, fontweight='bold', fontfamily='serif')
+    ax.set_yticks(np.arange(n_heights))
+    ax.set_yticklabels([f'{c:.2f}' for c in pivot.index], 
+                       fontsize=10, fontweight='bold', fontfamily='serif')
+    
+    # Labels with proper LaTeX formatting
+    ax.set_xlabel('Speed (mm/s)', fontsize=12, fontweight='bold', fontfamily='serif')
+    ax.set_ylabel(r'$h_1/d_n$', fontsize=12, fontweight='bold', fontfamily='serif')
     
     # Add colorbar with better styling
-    cbar = plt.colorbar(im, ax=ax, pad=0.02)
-    cbar.set_label('Success Rate', fontsize=10)
+    cbar = plt.colorbar(im, ax=ax, pad=0.02, aspect=20)
+    cbar.set_label('Success Rate', fontsize=11, fontweight='bold', fontfamily='serif')
     cbar.ax.tick_params(labelsize=9)
+    for label in cbar.ax.get_yticklabels():
+        label.set_fontweight('bold')
+        label.set_fontfamily('serif')
     
     # Add grid lines for better readability
-    ax.set_xticks(np.arange(len(pivot.columns)+1)-0.5, minor=True)
-    ax.set_yticks(np.arange(len(pivot.index)+1)-0.5, minor=True)
-    ax.grid(which='minor', color='white', linestyle='-', linewidth=0.8)
-    ax.tick_params(labelsize=10)
+    ax.set_xticks(np.arange(n_speeds + 1) - 0.5, minor=True)
+    ax.set_yticks(np.arange(n_heights + 1) - 0.5, minor=True)
+    ax.grid(which='minor', color='white', linestyle='-', linewidth=0.8, alpha=0.8)
+    ax.set_axisbelow(False)
+    
+    # Bold axis spines
+    for spine in ax.spines.values():
+        spine.set_linewidth(1.2)
     
     plt.tight_layout()
-    plt.show(block=True)
-    print("[OK] Displayed: Figure 8 — First-Layer Operating Envelope")
+    
+    # Save or display
+    if save_mode and output_dir:
+        output_path = output_dir / 'first_layer_operating_envelope.png'
+        output_dir.mkdir(parents=True, exist_ok=True)
+        fig.savefig(output_path, dpi=300, bbox_inches='tight', facecolor='white', edgecolor='none')
+        print(f"[OK] Saved: {output_path}", flush=True)
+        plt.close(fig)
+    else:
+        plt.show(block=True)
+        print("[OK] Displayed: Figure 8 — First-Layer Operating Envelope")
 
 
 def figure_9_open_circuit_rate(electrical_df: pd.DataFrame):
@@ -2549,6 +2581,106 @@ def figure_22_motor_load(baseline_lines: List[str], stabilized_lines: List[str])
     print("[OK] Displayed: Figure 22 — Energy / Motor Load Proxy", flush=True)
 
 
+def figure_24_survival_stats_summary():
+    """
+    Fig. 24 — Time-to-Failure Summary Statistics
+    Bar plot showing median time-to-failure with 95% CI error bars for all 5 conditions
+    IEEE-compatible styling with bold text
+    """
+    # Data from survival statistics table
+    conditions = [
+        'Baseline slicer',
+        'Baseline slicer (tuned)',
+        'Naïve no-retraction',
+        'Rate-limit only',
+        'Shaped (full)'
+    ]
+    
+    medians = [34, 58, 94, 125, 176]  # seconds
+    ci_lower = [18, 32, 62, 95, 149]   # CI lower bounds
+    ci_upper = [71, 88, 141, 155, 214] # CI upper bounds
+    censored = [0, 0, 1, 2, 4]         # Number of censored runs
+    
+    # Calculate error bars (distance from median to CI bounds)
+    errors_lower = [medians[i] - ci_lower[i] for i in range(len(medians))]
+    errors_upper = [ci_upper[i] - medians[i] for i in range(len(medians))]
+    
+    # Colors for each condition
+    colors = [
+        COLORS['baseline'],           # Baseline slicer - red
+        '#FF6B6B',                    # Baseline tuned - lighter red
+        COLORS['partial'],            # Naïve - orange
+        '#FFA500',                    # Rate-limit - darker orange
+        COLORS['stabilized']          # Shaped full - green
+    ]
+    
+    # IEEE-compatible figure
+    fig, ax = plt.subplots(figsize=(7.0, 4.5))
+    fig.patch.set_facecolor('white')
+    
+    x = np.arange(len(conditions))
+    width = 0.65
+    
+    # Create bars
+    bars = ax.bar(x, medians, width, color=colors, alpha=0.85, 
+                  edgecolor='black', linewidth=1.5, zorder=3)
+    
+    # Add error bars for confidence intervals
+    ax.errorbar(x, medians, yerr=[errors_lower, errors_upper],
+               fmt='none', color='black', capsize=8, capthick=2.0, 
+               linewidth=2.0, zorder=4)
+    
+    # Add value labels on bars
+    for i, (bar, median, censor) in enumerate(zip(bars, medians, censored)):
+        height = bar.get_height()
+        # Label with median value
+        ax.text(bar.get_x() + bar.get_width()/2., height + errors_upper[i] + 5,
+               f'{median}s', ha='center', va='bottom', 
+               fontweight='bold', fontsize=11, fontfamily='serif', zorder=5)
+        # Add censored count annotation
+        if censor > 0:
+            ax.text(bar.get_x() + bar.get_width()/2., height/2,
+                   f'({censor} censored)', ha='center', va='center',
+                   fontweight='bold', fontsize=9, fontfamily='serif',
+                   color='white', zorder=6)
+    
+    # Enhanced IEEE-compatible styling
+    ax.set_xlabel('Condition', fontsize=13, fontweight='bold', fontfamily='serif')
+    ax.set_ylabel('Median Time-to-Failure [s]', fontsize=13, fontweight='bold', fontfamily='serif')
+    ax.set_title(r'Time-to-Failure Summary ($N=10$ runs, $T_{\max}=240$ s)', 
+                fontsize=13, fontweight='bold', fontfamily='serif', pad=10)
+    
+    # Set x-axis labels with rotation for readability
+    ax.set_xticks(x)
+    ax.set_xticklabels(conditions, rotation=15, ha='right', fontsize=10, fontweight='bold', fontfamily='serif')
+    
+    # Bold tick labels
+    ax.tick_params(axis='both', which='major', labelsize=11, width=1.2, length=5)
+    for label in ax.get_yticklabels():
+        label.set_fontweight('bold')
+        label.set_fontfamily('serif')
+    
+    # Add horizontal reference line at T_max
+    ax.axhline(y=240, color='gray', linestyle='--', linewidth=1.5, alpha=0.5, zorder=1)
+    ax.text(len(conditions)-0.5, 240, r' $T_{\max}=240$s', 
+           fontsize=9, fontweight='bold', va='bottom', fontfamily='serif')
+    
+    # Enhanced grid
+    ax.grid(True, axis='y', alpha=0.5, linestyle='--', linewidth=1.0, color='gray', zorder=0)
+    ax.set_axisbelow(True)
+    ax.set_ylim([0, 250])
+    
+    # Bold axis spines
+    for spine in ax.spines.values():
+        spine.set_linewidth(1.5)
+    
+    plt.tight_layout()
+    plt.draw()
+    plt.pause(0.1)
+    plt.show(block=True)
+    print("[OK] Displayed: Figure 24 — Time-to-Failure Summary Statistics", flush=True)
+
+
 def figure_23_timelapse_annotation(image_paths: Optional[Dict[str, str]] = None):
     """
     Fig. 23 — Time-Lapse Frame with Flow Annotation
@@ -2618,7 +2750,7 @@ def main():
                       help='Directory containing CSV data files (default: code/data)')
     parser.add_argument('--figures', type=str, nargs='+', default=['all'],
                       choices=['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12', '13', 
-                              '14', '15', '16', '17', '18', '19', '20', '21', '22', '23', 'all'],
+                              '14', '15', '16', '17', '18', '19', '20', '21', '22', '23', '24', 'all'],
                       help='Which figures to generate (default: all). Figure 13 is the effectiveness dashboard.')
     parser.add_argument('--alpha', type=float, default=8.0,
                       help='Pressure model parameter α (default: 8.0)')
@@ -2705,7 +2837,7 @@ def main():
     # Determine which figures to generate
     if 'all' in args.figures:
         figures_to_generate = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12', '13',
-                              '14', '15', '16', '17', '18', '19', '20', '21', '22', '23']
+                              '14', '15', '16', '17', '18', '19', '20', '21', '22', '23', '24']
     else:
         figures_to_generate = args.figures
     
@@ -2748,7 +2880,11 @@ def main():
     if '8' in figures_to_generate:
         if first_layer_df is not None:
             print("Generating Figure 8...", flush=True)
-            figure_8_first_layer_map(first_layer_df)
+            # Determine output directory
+            output_dir = None
+            if hasattr(args, 'save') and args.save:
+                output_dir = Path(args.output_dir) if hasattr(args, 'output_dir') and args.output_dir else Path('results/figures')
+            figure_8_first_layer_map(first_layer_df, save_mode=(output_dir is not None), output_dir=output_dir)
         else:
             print("⚠ Skipping Figure 8: first_layer_sweep.csv not found", flush=True)
     
@@ -2822,6 +2958,10 @@ def main():
     if '23' in figures_to_generate:
         print("Generating Figure 23 (Time-Lapse Frame with Flow Annotation)...", flush=True)
         figure_23_timelapse_annotation()  # Can pass image_paths dict if available
+    
+    if '24' in figures_to_generate:
+        print("Generating Figure 24 (Time-to-Failure Summary Statistics)...", flush=True)
+        figure_24_survival_stats_summary()
     
     print(f"\n[OK] All requested figures displayed.", flush=True)
 

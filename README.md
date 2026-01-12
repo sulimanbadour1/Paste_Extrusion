@@ -131,7 +131,7 @@ code/
 
 **Main Stabilizer (`paste_stabilizer_v2.py`)**  
 - Core engine that reads input G-code, writes stabilized G-code, produces logs
-- **Key feature**: Preserves XY/Z geometry when suppressing retractions
+  - **Key feature**: Preserves XY/Z geometry when suppressing retractions
 - Implements pressure estimation model (`p_hat`) and command shaping
 - Generates detailed CSV logs for scientific analysis
 
