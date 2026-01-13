@@ -720,9 +720,6 @@ This is a research codebase. For questions or contributions:
 
 ---
 
-## 📝 License
-
-[Specify your license here - MIT, GPL, etc.]
 
 ---
 
@@ -730,19 +727,10 @@ This is a research codebase. For questions or contributions:
 
 - Built for paste extrusion 3D printing research
 - Designed for reproducibility and scientific rigor
-- Optimized for IEEE publication standards
 
 ---
 
-## 📞 Support
 
-For questions or issues:
-- Review the troubleshooting section
-- Check `code/input/README.md` for data file formats
-- Examine example outputs in `results/` directory
-
----
-
-**Last Updated**: 2024  
+**Last Updated**: 2025  
 **Version**: 2.1  
 **Status**: Production Ready ✅
