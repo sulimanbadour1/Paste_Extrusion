@@ -693,22 +693,6 @@ The stabilizer can be integrated into slicer post-processing:
 3. Send stabilized G-code to printer
 
 ---
-
-## 📖 Citation
-
-If you use this software in your research, please cite:
-
-```bibtex
-@article{paste_stabilization_2024,
-  title={Software-Defined Pressure and Flow Stabilization of Low-Cost Paste Extrusion 3D Printers},
-  author={[Your Names]},
-  journal={IEEE [Journal Name]},
-  year={2024}
-}
-```
-
----
-
 ## 🤝 Contributing
 
 This is a research codebase. For questions or contributions:
