@@ -212,6 +212,11 @@ class StabilizerGUI:
         ttk.Checkbutton(options_frame, text="Statistics Summary", 
                        variable=self.viz_stats).pack(anchor=tk.W)
         
+        # Show retractions button
+        retractions_btn = ttk.Button(frame, text="Show Retractions Only", 
+                                    command=self.run_show_retractions)
+        retractions_btn.pack(pady=5)
+        
         # Run visualization
         viz_btn = ttk.Button(frame, text="Generate Visualizations", 
                             command=self.run_visualization)
@@ -579,6 +584,66 @@ For more information, see readme.md
         except Exception as e:
             self.verification_log.insert(tk.END, f"\n\nERROR: {str(e)}")
             messagebox.showerror("Error", f"Failed to run verification: {str(e)}")
+    
+    def run_show_retractions(self):
+        """Run the show_retractions.py script to compare baseline retractions with stabilized micro-primes."""
+        baseline_file = self.viz_original.get()
+        stabilized_file = self.viz_stabilized.get()
+        
+        if not baseline_file:
+            self.visualization_log.insert(tk.END, "ERROR: Please specify a baseline G-code file.\n")
+            self.visualization_log.see(tk.END)
+            return
+        
+        if not stabilized_file:
+            self.visualization_log.insert(tk.END, "ERROR: Please specify a stabilized G-code file.\n")
+            self.visualization_log.see(tk.END)
+            return
+        
+        # Resolve paths
+        script_dir = Path(__file__).parent
+        baseline_path = Path(baseline_file).resolve() if Path(baseline_file).is_absolute() else script_dir / baseline_file
+        stabilized_path = Path(stabilized_file).resolve() if Path(stabilized_file).is_absolute() else script_dir / stabilized_file
+        
+        if not baseline_path.exists():
+            self.visualization_log.insert(tk.END, f"ERROR: Baseline file not found: {baseline_path}\n")
+            self.visualization_log.see(tk.END)
+            return
+        
+        if not stabilized_path.exists():
+            self.visualization_log.insert(tk.END, f"ERROR: Stabilized file not found: {stabilized_path}\n")
+            self.visualization_log.see(tk.END)
+            return
+        
+        self.visualization_log.insert(tk.END, f"Comparing retractions vs micro-primes:\n")
+        self.visualization_log.insert(tk.END, f"  Baseline: {baseline_path.name}\n")
+        self.visualization_log.insert(tk.END, f"  Stabilized: {stabilized_path.name}\n")
+        self.visualization_log.see(tk.END)
+        self.root.update()
+        
+        # Run show_retractions.py
+        show_retractions_script = script_dir / "show_retractions.py"
+        
+        try:
+            cmd = [sys.executable, str(show_retractions_script), 
+                   "--baseline", str(baseline_path),
+                   "--stabilized", str(stabilized_path)]
+            result = subprocess.run(cmd, capture_output=True, text=True, cwd=str(script_dir))
+            
+            if result.stdout:
+                self.visualization_log.insert(tk.END, result.stdout)
+            if result.stderr:
+                self.visualization_log.insert(tk.END, result.stderr)
+            
+            if result.returncode == 0:
+                self.visualization_log.insert(tk.END, "\n[OK] Retraction vs Micro-prime comparison displayed!\n")
+            else:
+                self.visualization_log.insert(tk.END, f"\n[WARNING] Process exited with code {result.returncode}\n")
+            
+            self.visualization_log.see(tk.END)
+        except Exception as e:
+            self.visualization_log.insert(tk.END, f"ERROR: {str(e)}\n")
+            self.visualization_log.see(tk.END)
     
     def run_visualization(self):
         """Run visualization scripts."""
