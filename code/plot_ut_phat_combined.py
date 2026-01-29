@@ -156,15 +156,23 @@ def compute_u_timeline(gcode_lines: List[str]) -> Tuple[np.ndarray, np.ndarray]:
 
 
 def compute_pressure_timeline(times: np.ndarray, u_values: np.ndarray,
-                               alpha: float = 1.0, tau_r: float = 6.0,
-                               p_y: float = 5.0, p_max: float = 14.0) -> np.ndarray:
+                               alpha: float = 8.0, tau_r: float = 6.0,
+                               p_y: float = 5.0, p_max: float = 14.0,
+                               initial_pressure: Optional[float] = None) -> np.ndarray:
     """
     Compute pressure estimate p̂(t) from u(t) timeline.
     Model: p_{k+1} = p_k + Δt_k * (α * u_k - p_k / τ_r)
     Uses sub-stepping for stability when dt is large.
+    
+    Args:
+        initial_pressure: Initial pressure value. If None, uses 0.0 for baseline,
+                         or p_y + 1.0 for stabilized (after header priming).
     """
     p_hat = np.zeros_like(times)
-    p_hat[0] = 0.0  # Initial pressure
+    if initial_pressure is None:
+        p_hat[0] = 0.0  # Default: start at zero for baseline
+    else:
+        p_hat[0] = initial_pressure  # Use provided initial pressure
     
     # Maximum time step for integration (for stability)
     max_dt = 0.1  # seconds
@@ -200,10 +208,15 @@ def compute_pressure_timeline(times: np.ndarray, u_values: np.ndarray,
 
 def create_combined_figure(baseline_lines: List[str], stabilized_lines: List[str],
                           output_path: Path, dpi: int = 300,
-                          alpha: float = 1.0, tau_r: float = 6.0,
-                          p_y: float = 5.0, p_max: float = 14.0):
+                          alpha: float = 8.0, tau_r: float = 6.0,
+                          p_y: float = 5.0, p_max: float = 14.0,
+                          csv_log_path: Optional[Path] = None):
     """
     Create a 2×2 figure showing u(t) and p̂(t) for baseline and stabilized.
+    
+    Args:
+        csv_log_path: Optional path to CSV log from stabilizer. If provided, uses actual p_hat values
+                     from the log instead of computing from G-code.
     """
     print("Computing u(t) timelines...", flush=True)
     
@@ -213,9 +226,35 @@ def create_combined_figure(baseline_lines: List[str], stabilized_lines: List[str
     
     print("Computing p̂(t) timelines...", flush=True)
     
-    # Compute p̂(t) for both
-    p_baseline = compute_pressure_timeline(times_baseline, u_baseline, alpha, tau_r, p_y, p_max)
-    p_stabilized = compute_pressure_timeline(times_stabilized, u_stabilized, alpha, tau_r, p_y, p_max)
+    # Compute p̂(t) for baseline (always from G-code)
+    p_baseline = compute_pressure_timeline(times_baseline, u_baseline, alpha, tau_r, p_y, p_max, initial_pressure=0.0)
+    
+    # For stabilized: use CSV log if available, otherwise compute from G-code
+    if csv_log_path and csv_log_path.exists():
+        print(f"Using CSV log for stabilized pressure: {csv_log_path}", flush=True)
+        try:
+            import pandas as pd
+            df = pd.read_csv(csv_log_path)
+            # Handle different CSV formats: 't_s' or 't' for time, 'p_hat' for pressure
+            time_col = 't_s' if 't_s' in df.columns else ('t' if 't' in df.columns else None)
+            if time_col and 'p_hat' in df.columns:
+                times_stabilized = pd.to_numeric(df[time_col], errors='coerce').fillna(0.0).values
+                p_stabilized = pd.to_numeric(df['p_hat'], errors='coerce').fillna(0.0).values
+                # Remove any NaN or invalid values
+                valid_mask = np.isfinite(times_stabilized) & np.isfinite(p_stabilized)
+                times_stabilized = times_stabilized[valid_mask]
+                p_stabilized = p_stabilized[valid_mask]
+                print(f"Loaded {len(p_stabilized)} pressure points from CSV log", flush=True)
+                print(f"CSV pressure range: [{np.min(p_stabilized):.2f}, {np.max(p_stabilized):.2f}]", flush=True)
+            else:
+                print(f"CSV log missing required columns (found: {list(df.columns)}), computing from G-code instead", flush=True)
+                p_stabilized = compute_pressure_timeline(times_stabilized, u_stabilized, alpha, tau_r, p_y, p_max, initial_pressure=p_y + 1.0)
+        except Exception as e:
+            print(f"Error reading CSV log: {e}, computing from G-code instead", flush=True)
+            p_stabilized = compute_pressure_timeline(times_stabilized, u_stabilized, alpha, tau_r, p_y, p_max, initial_pressure=p_y + 1.0)
+    else:
+        # Compute from G-code: starts at p_y + 1.0 = 6.0 (after header priming, matches stabilizer behavior)
+        p_stabilized = compute_pressure_timeline(times_stabilized, u_stabilized, alpha, tau_r, p_y, p_max, initial_pressure=p_y + 1.0)
     
     # Debug: Verify computed values
     print(f"Baseline p̂(t): range [{np.min(p_baseline):.2f}, {np.max(p_baseline):.2f}] kPa, mean {np.mean(p_baseline):.2f} kPa", flush=True)
@@ -356,9 +395,9 @@ def create_combined_figure(baseline_lines: List[str], stabilized_lines: List[str
     ax2.fill_between([0, t_max], p_y, p_max, alpha=0.25, color=COLORS['admissible'], 
                    label='Admissible Window', zorder=1)
     ax2.axhline(p_y, color=COLORS['yield'], linestyle='--', linewidth=2.5, 
-               label=f'p_y = {p_y:.1f} kPa', zorder=2)
+               label=f'p_y = {p_y:.1f}', zorder=2)
     ax2.axhline(p_max, color=COLORS['max'], linestyle='--', linewidth=2.5, 
-               label=f'p_max = {p_max:.1f} kPa', zorder=2)
+               label=f'p_max = {p_max:.1f}', zorder=2)
     
     # Plot baseline p̂(t)
     if len(times_baseline) > 0 and len(p_baseline) > 0:
@@ -395,8 +434,8 @@ def create_combined_figure(baseline_lines: List[str], stabilized_lines: List[str
             print(f"WARNING: No valid stabilized data to plot within time window [0, {t_max:.2f}]s", flush=True)
     
     ax2.set_xlabel('Time (s)', fontsize=13, fontweight='bold')
-    ax2.set_ylabel('Estimated Pressure p̂(t) (kPa)', fontsize=13, fontweight='bold')
-    ax2.set_title('(b) Estimated Pressure p̂(t)', fontsize=14, fontweight='bold', pad=12)
+    ax2.set_ylabel('Surrogate level p̂(t)', fontsize=13, fontweight='bold')
+    ax2.set_title('(b) Surrogate level p̂(t)', fontsize=14, fontweight='bold', pad=12)
     ax2.grid(True, alpha=0.4, linestyle='--', linewidth=0.8, zorder=1)
     ax2.set_axisbelow(True)
     ax2.set_xlim([0, t_max])
@@ -434,8 +473,10 @@ def create_combined_figure(baseline_lines: List[str], stabilized_lines: List[str
     # ========================================================================
     # Adjust layout to accommodate legends outside
     plt.tight_layout(rect=[0, 0.04, 0.92, 0.96])  # Leave space for suptitle, note, and legends
-    plt.show()  # Display figure on screen
-    print(f"[OK] Figure displayed. Save manually if needed.", flush=True)
+    plt.savefig(output_path, dpi=dpi, bbox_inches='tight')
+    print(f"[OK] Figure saved to {output_path}", flush=True)
+    # plt.show()  # Display figure on screen
+    # print(f"[OK] Figure displayed. Save manually if needed.", flush=True)
 
 
 # ============================================================================
@@ -464,14 +505,16 @@ Examples:
                        help='Output path for saved figure (default: results/ut_phat_combined.png)')
     parser.add_argument('--dpi', type=int, default=300,
                        help='DPI for saved figure (default: 300)')
-    parser.add_argument('--alpha', type=float, default=1.0,
-                       help='Pressure model parameter alpha (default: 1.0, matches stabilizer)')
+    parser.add_argument('--alpha', type=float, default=8.0,
+                       help='Pressure model parameter alpha (default: 8.0, matches stabilizer)')
     parser.add_argument('--tau-r', type=float, default=6.0,
                        help='Pressure model parameter tau_r (default: 6.0)')
     parser.add_argument('--p-y', type=float, default=5.0,
                        help='Yield pressure p_y (default: 5.0)')
     parser.add_argument('--p-max', type=float, default=14.0,
                        help='Maximum pressure p_max (default: 14.0)')
+    parser.add_argument('--csv-log', dest='csv_log', type=str, default=None,
+                       help='Optional CSV log file from stabilizer (if provided, uses actual p_hat values)')
     
     args = parser.parse_args()
     
@@ -508,10 +551,19 @@ Examples:
     
     print(f"Loaded {len(baseline_lines)} baseline lines, {len(stabilized_lines)} stabilized lines", flush=True)
     
+    # Resolve CSV log path if provided
+    csv_log_path = None
+    if args.csv_log:
+        csv_log_path = Path(args.csv_log)
+        if not csv_log_path.is_absolute():
+            test_path = script_dir / args.csv_log
+            if test_path.exists():
+                csv_log_path = test_path
+    
     # Create visualization
     output_path = Path(args.output)
     create_combined_figure(baseline_lines, stabilized_lines, output_path, args.dpi,
-                          args.alpha, args.tau_r, args.p_y, args.p_max)
+                          args.alpha, args.tau_r, args.p_y, args.p_max, csv_log_path=csv_log_path)
     
     print("[OK] Done", flush=True)
     plt.show()

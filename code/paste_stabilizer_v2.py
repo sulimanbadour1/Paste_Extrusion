@@ -91,7 +91,7 @@ class StabilizerConfig:
 
     # ---- Pressure estimator (discrete) ----
     Ts: float = 0.10             # estimator sampling interval (s) used internally per processed move
-    alpha: float = 1.0           # pressure gain (arbitrary units per u)
+    alpha: float = 8.0           # pressure gain (arbitrary units per u) - matches params.json and plotting scripts
     tau_r: float = 6.0           # relaxation time constant (s)
     p_y: float = 5.0             # effective yield threshold (arb units)
     p_max: float = 14.0          # upper safe bound (arb units)
@@ -178,7 +178,8 @@ def emit_header_block(cfg: StabilizerConfig, reset_e: bool = True) -> List[str]:
 
 def emit_retraction_replacement(cfg: StabilizerConfig, original_line: str, 
                                  x: Optional[float] = None, y: Optional[float] = None,
-                                 z: Optional[float] = None, f: Optional[float] = None) -> List[str]:
+                                 z: Optional[float] = None, f: Optional[float] = None,
+                                 micro_prime_e: Optional[float] = None) -> List[str]:
     """
     Replace retraction with dwell + micro-prime, preserving any XY/Z movement.
     IMPORTANT: Split travel and prime to avoid extruding during travel (unsafe for paste).
@@ -207,12 +208,14 @@ def emit_retraction_replacement(cfg: StabilizerConfig, original_line: str,
         out.append(" ".join(travel_parts) + " ; travel (no extrusion)")
         
         # Then: micro-prime as pure E move
-        if cfg.micro_prime_e > 0:
-            out.append(f"G1 E{cfg.micro_prime_e:.3f} F{cfg.micro_prime_feed:.1f} ; micro-prime after travel")
+        mp_e = micro_prime_e if micro_prime_e is not None else cfg.micro_prime_e
+        if mp_e > 0:
+            out.append(f"G1 E{mp_e:.3f} F{cfg.micro_prime_feed:.1f} ; micro-prime after travel")
     else:
         # No geometry: just dwell + pure E prime
-        if cfg.micro_prime_e > 0:
-            out.append(f"G1 E{cfg.micro_prime_e:.3f} F{cfg.micro_prime_feed:.1f} ; micro-prime after dwell")
+        mp_e = micro_prime_e if micro_prime_e is not None else cfg.micro_prime_e
+        if mp_e > 0:
+            out.append(f"G1 E{mp_e:.3f} F{cfg.micro_prime_feed:.1f} ; micro-prime after dwell")
     
     return out
 
@@ -298,15 +301,19 @@ class PasteStabilizerV2:
             
             # Initialize pressure state after priming header
             # The header primes the system, so we estimate initial pressure
+            # Set to a safe initial value: slightly above yield, well below max
+            # This avoids pressure buildup issues with high alpha values
             prime_e_total = self.cfg.prime_total_e + self.cfg.purge_e * 1.2
             # Rough time estimate for priming operations
             prime_time = max(self.cfg.prime_steps * self.cfg.Ts, 2.0)  # at least 2 seconds
-            # Estimate average extrusion rate during priming
+            # Estimate average extrusion rate during priming (for u_prev initialization)
             u_prime_avg = self.cfg.u_scale * (prime_e_total / prime_time)
-            # Update pressure to reflect priming (multiple steps for accuracy)
-            steps = max(5, int(prime_time / self.cfg.Ts))
-            for _ in range(steps):
-                self._pressure_update(u_prime_avg, self.cfg.Ts)
+            # Set initial pressure to a safe value: above yield but well below max
+            # Start closer to p_y to leave room for micro-primes and extrusion moves
+            # With alpha=8.0, micro-primes add significant pressure, so start low
+            p_initial = self.cfg.p_y + 1.0  # Start at p_y + 1.0 = 6.0
+            self.p.p_hat = p_initial
+            self.p.u_prev = u_prime_avg  # Initialize u_prev for rate limiting
             self.t_sim += prime_time
 
     def _estimate_dt(self, code: str, x: Optional[float], y: Optional[float], e: Optional[float], f: Optional[float]) -> float:
@@ -389,24 +396,48 @@ class PasteStabilizerV2:
         action = "emit"
 
         # 1) Too high pressure: dwell (relax) BEFORE the move
-        if p_predicted > (self.cfg.p_max - self.cfg.relax_trigger_margin) or self.p.p_hat > (self.cfg.p_max - self.cfg.relax_trigger_margin):
+        # Use more aggressive threshold: trigger earlier to prevent exceeding p_max
+        relax_threshold = self.cfg.p_max - self.cfg.relax_trigger_margin  # 13.5
+        target_p_relax = self.cfg.p_max - 2.0 * self.cfg.relax_trigger_margin  # Target: 12.5 (well below max)
+        relax_count = 0
+        max_relax_iterations = 5  # Prevent infinite loops
+        
+        while (p_predicted > relax_threshold or self.p.p_hat > relax_threshold) and relax_count < max_relax_iterations:
             action = "relax_dwell"
-            out_lines.append(f"; [stabilizer] p_hat={self.p.p_hat:.2f} near/over p_max, relaxing")
-            out_lines.append(f"G4 S{self.cfg.relax_dwell_s:.2f} ; relax pressure")
+            current_p = self.p.p_hat
+            
+            # Calculate required dwell time to bring pressure down to target
+            if current_p > target_p_relax:
+                # Calculate: p_target = p_current * exp(-dwell / tau_r)
+                # Solving: dwell = -tau_r * ln(target_p / current_p)
+                required_dwell = -self.cfg.tau_r * math.log(target_p_relax / max(current_p, 0.01))
+                # Use at least the base dwell, but extend if needed (cap at reasonable limit)
+                dwell_time = max(self.cfg.relax_dwell_s, min(required_dwell, 2.0))
+            else:
+                dwell_time = self.cfg.relax_dwell_s
+            
+            out_lines.append(f"; [stabilizer] p_hat={self.p.p_hat:.2f} near/over threshold ({relax_threshold:.1f}), relaxing")
+            out_lines.append(f"G4 S{dwell_time:.2f} ; relax pressure")
 
             # Log the relax dwell action
             self._log(action="relax_dwell",
-                     line_in=code, line_out=f"G4 S{self.cfg.relax_dwell_s:.2f}",
-                     e=None, dt=self.cfg.relax_dwell_s,
+                     line_in=code, line_out=f"G4 S{dwell_time:.2f}",
+                     e=None, dt=dwell_time,
                      u_raw=None, u_shaped=None, feed_scale=None)
 
             # B1 FIX: Update estimator for dwell FIRST (before move)
-            self._pressure_update(0.0, self.cfg.relax_dwell_s)
-            self.t_sim += self.cfg.relax_dwell_s
+            self._pressure_update(0.0, dwell_time)
+            self.t_sim += dwell_time
+            
+            # Recompute prediction after relaxation
+            p_predicted = self.p.p_hat + dt_initial * (self.cfg.alpha * u_candidate - self.p.p_hat / self.cfg.tau_r)
+            p_predicted = max(0.0, p_predicted)
+            relax_count += 1
 
         # 2) Too low pressure: inject priming steps until above yield (bounded)
         lowprime_count = 0
-        while self.p.p_hat < self.cfg.p_y and lowprime_count < self.cfg.lowprime_steps_max:
+        # D4 FIX: Only prime if we are actually about to extrude (e > 0)
+        while e > 0 and self.p.p_hat < self.cfg.p_y and lowprime_count < self.cfg.lowprime_steps_max:
             action = "low_prime"
             out_lines.append(f"; [stabilizer] p_hat={self.p.p_hat:.2f} below p_y, priming")
             prime_line = f"G1 E{self.cfg.lowprime_e:.3f} F{self.cfg.lowprime_feed:.1f}"
@@ -430,7 +461,7 @@ class PasteStabilizerV2:
             self.t_sim += dtp
             lowprime_count += 1
 
-        # Now compute shaping for the actual move
+        # Now compute shaping for the actual move (AFTER priming loop completes)
         u_shaped = self._rate_limit(u_raw_initial)
 
         # Feed scaling:
@@ -571,20 +602,81 @@ class PasteStabilizerV2:
                         if self.extrusion_mode == "ABS":
                             self.k.e_abs_prev = e_token
                         
-                        # Replace retraction, preserving geometry
-                        repl = emit_retraction_replacement(self.cfg, raw, x, y, z, f)
+                        # D5 FIX: Check pressure before micro-prime to avoid exceeding p_max
+                        # Reduce micro-prime magnitude if pressure is already high
+                        pressure_ratio = self.p.p_hat / self.cfg.p_max if self.cfg.p_max > 0 else 0.0
+                        if pressure_ratio > 0.7:  # If pressure > 70% of max, reduce micro-prime
+                            micro_prime_scale = max(0.3, 1.0 - (pressure_ratio - 0.7) / 0.3)  # Scale from 1.0 to 0.3
+                            micro_prime_e_actual = self.cfg.micro_prime_e * micro_prime_scale
+                        else:
+                            micro_prime_e_actual = self.cfg.micro_prime_e
+                        
+                        # Estimate dt for micro-prime: use Ts
+                        dt_mp = self.cfg.Ts
+                        u_mp = self.cfg.u_scale * (micro_prime_e_actual / dt_mp)
+                        u_mp = self._rate_limit(u_mp)
+                        
+                        # Predict pressure after regular dwell + micro-prime
+                        # Simulate regular dwell relaxation using Euler method (matches _pressure_update)
+                        p_after_regular_dwell = self.p.p_hat
+                        steps_dwell = max(1, int(math.ceil(self.cfg.retract_dwell_s / self.cfg.Ts)))
+                        h_dwell = self.cfg.retract_dwell_s / steps_dwell
+                        for _ in range(steps_dwell):
+                            dp = -p_after_regular_dwell / self.cfg.tau_r
+                            p_after_regular_dwell = max(0.0, p_after_regular_dwell + h_dwell * dp)
+                        
+                        # Predict micro-prime effect
+                        p_predicted_mp = p_after_regular_dwell + dt_mp * (self.cfg.alpha * u_mp - p_after_regular_dwell / self.cfg.tau_r)
+                        
+                        # If pressure would exceed max, add extra relaxation dwell before micro-prime
+                        extra_dwell = 0.0
+                        if p_predicted_mp > self.cfg.p_max:
+                            # Calculate how much extra dwell is needed to bring pressure down
+                            # Target: bring pressure low enough that micro-prime stays below p_max
+                            # We want: p_after_all_dwells + micro_prime_effect <= p_max
+                            # Solve for target pressure before micro-prime
+                            # p_max >= p_target + dt_mp * (alpha*u_mp - p_target/tau_r)
+                            # Rearranging: p_target <= (p_max - alpha*u_mp*dt_mp) / (1 - dt_mp/tau_r)
+                            target_p_before_mp = (self.cfg.p_max - self.cfg.alpha * u_mp * dt_mp) / (1.0 - dt_mp / self.cfg.tau_r)
+                            target_p_before_mp = max(self.cfg.p_y, target_p_before_mp)  # Don't go below yield
+                            
+                            if p_after_regular_dwell > target_p_before_mp:
+                                # Calculate extra dwell needed: target_p = p_after_regular_dwell * exp(-extra_dwell / tau_r)
+                                extra_dwell = -self.cfg.tau_r * math.log(target_p_before_mp / max(p_after_regular_dwell, 0.01))
+                                extra_dwell = min(extra_dwell, 5.0)  # Cap at 5 seconds
+                                extra_dwell = max(extra_dwell, 0.0)
+                        
+                        # Replace retraction, preserving geometry (use scaled micro-prime if pressure is high)
+                        repl = emit_retraction_replacement(self.cfg, raw, x, y, z, f, micro_prime_e=micro_prime_e_actual)
+                        
+                        # Add extra relaxation dwell if needed (insert before micro-prime, which is last)
+                        if extra_dwell > 0.01:
+                            # Insert before the last element (micro-prime)
+                            repl.insert(-1, f"G4 S{extra_dwell:.2f} ; extra relaxation (pressure too high)")
+                        
                         out.extend(repl)
                         self.changes.append(f"Suppressed retraction at line {idx+1} (geometry preserved).")
-                        
-                        # Log the replacement as an event with dt ~ dwell
-                        self._log(action="retract_suppressed",
-                                  line_in=raw, line_out=" | ".join(repl),
-                                  e=e_delta,
-                                  dt=self.cfg.retract_dwell_s,
-                                  u_raw=None, u_shaped=None, feed_scale=None)
-                        # simulate dwell relaxation in estimator:
+
+                        # Update pressure estimator in correct order:
+                        # 1. Extra dwell (if any)
+                        if extra_dwell > 0.01:
+                            self._pressure_update(0.0, extra_dwell)
+                            self.t_sim += extra_dwell
+                        # 2. Regular dwell
                         self._pressure_update(0.0, self.cfg.retract_dwell_s)
                         self.t_sim += self.cfg.retract_dwell_s
+                        # 3. Micro-prime (use scaled value)
+                        self._pressure_update(u_mp, dt_mp)
+                        self.t_sim += dt_mp
+                        self.p.u_prev = u_mp
+
+                        # Log the replacement as an event (use actual micro-prime E value)
+                        self._log(action="retract_suppressed",
+                                  line_in=raw, line_out=" | ".join(repl),
+                                  e=micro_prime_e_actual,
+                                  dt=self.cfg.retract_dwell_s + extra_dwell + dt_mp,
+                                  u_raw=u_mp, u_shaped=u_mp, feed_scale=None)
+                        
                         continue
 
             # For moves with extrusion, apply shaping
